@@ -3,6 +3,7 @@ package websocket
 import (
 	"context"
 	"strings"
+	"time"
 
 	"golang.org/x/net/websocket"
 
@@ -18,6 +19,9 @@ type Client struct {
 	path     string
 }
 
+// websocketHandshakeTimeout bounds the http upgrade handshake
+const websocketHandshakeTimeout = time.Second * 10
+
 func (c *Client) DialConn(*tunnel.Address, tunnel.Tunnel) (tunnel.Conn, error) {
 	conn, err := c.underlay.DialConn(nil, &Tunnel{})
 	if err != nil {
@@ -27,10 +31,14 @@ func (c *Client) DialConn(*tunnel.Address, tunnel.Tunnel) (tunnel.Conn, error) {
 	origin := "https://" + c.hostname
 	wsConfig, err := websocket.NewConfig(url, origin)
 	if err != nil {
+		conn.Close()
 		return nil, common.NewError("invalid websocket config").Base(err)
 	}
+	conn.SetDeadline(time.Now().Add(websocketHandshakeTimeout))
 	wsConn, err := websocket.NewClient(wsConfig, conn)
+	conn.SetDeadline(time.Time{})
 	if err != nil {
+		conn.Close()
 		return nil, common.NewError("websocket failed to handshake with server").Base(err)
 	}
 	return &OutboundConn{

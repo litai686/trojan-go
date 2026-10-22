@@ -9,6 +9,7 @@ import (
 	"net"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/p4gefau1t/trojan-go/common"
 	"github.com/p4gefau1t/trojan-go/log"
@@ -22,6 +23,14 @@ type ConnectConn struct {
 
 func (c *ConnectConn) Metadata() *tunnel.Metadata {
 	return c.metadata
+}
+
+// CloseWrite propagates the half close to the underlying connection
+func (c *ConnectConn) CloseWrite() error {
+	if cw, ok := c.Conn.(interface{ CloseWrite() error }); ok {
+		return cw.CloseWrite()
+	}
+	return common.ErrCloseWriteNotSupported
 }
 
 type OtherConn struct {
@@ -72,14 +81,13 @@ func (s *Server) acceptLoop() {
 	for {
 		conn, err := s.underlay.AcceptConn(&Tunnel{})
 		if err != nil {
-			select {
-			case <-s.ctx.Done():
+			if s.ctx.Err() != nil {
 				log.Error(common.NewError("http closed"))
 				return
-			default:
-				log.Error(common.NewError("http failed to accept connection").Base(err))
-				continue
 			}
+			log.Error(common.NewError("http failed to accept connection").Base(err))
+			time.Sleep(time.Millisecond * 100)
+			continue
 		}
 
 		go func(conn net.Conn) {
@@ -87,6 +95,7 @@ func (s *Server) acceptLoop() {
 			req, err := http.ReadRequest(reqBufReader)
 			if err != nil {
 				log.Error(common.NewError("not a valid http request").Base(err))
+				conn.Close()
 				return
 			}
 
@@ -112,6 +121,8 @@ func (s *Server) acceptLoop() {
 				}
 			} else { // GET, POST, PUT...
 				defer conn.Close()
+				// reused across keep-alive requests to avoid per-request allocations
+				respBufWriter := bufio.NewWriterSize(conn, 4096)
 				for {
 					reqReader, reqWriter := io.Pipe()
 					respReader, respWriter := io.Pipe()
@@ -146,7 +157,12 @@ func (s *Server) acceptLoop() {
 						log.Error(common.NewError("http failed to read http response").Base(err))
 						return
 					}
-					err = resp.Write(conn) // send the response back to the local
+					// batch the response headers and small writes instead of issuing
+					// one write syscall per header line
+					err = resp.Write(respBufWriter) // send the response back to the local
+					if err == nil {
+						err = respBufWriter.Flush()
+					}
 					if err != nil {
 						log.Error(common.NewError("http failed to write the response back").Base(err))
 						return

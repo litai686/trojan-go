@@ -2,11 +2,13 @@ package router
 
 import (
 	"context"
+	"encoding/binary"
 	"net"
 	"regexp"
 	"runtime"
 	"strconv"
 	"strings"
+	"time"
 
 	v2router "github.com/v2fly/v2ray-core/v4/app/router"
 
@@ -33,69 +35,170 @@ const (
 
 const MaxPacketSize = 1024 * 8
 
-func matchDomain(list []*v2router.Domain, target string) bool {
+// resolveTimeout bounds the dns lookup performed during routing
+const resolveTimeout = time.Second * 3
+
+// domainMatcher indexes routing rules so a lookup costs a few map reads
+// instead of a scan over every loaded rule
+//
+// Rules of one strategy list are equivalent: any hit selects the strategy, so
+// the original order between rule types carries no meaning and they can be
+// split by type
+type domainMatcher struct {
+	full    map[string]struct{}
+	suffix  map[string]struct{}
+	keyword []string
+	regex   []*regexp.Regexp
+}
+
+func newDomainMatcher(list []*v2router.Domain) *domainMatcher {
+	m := &domainMatcher{
+		full:   make(map[string]struct{}, len(list)),
+		suffix: make(map[string]struct{}, len(list)),
+	}
 	for _, d := range list {
 		switch d.GetType() {
 		case v2router.Domain_Full:
-			domain := d.GetValue()
-			if domain == target {
-				log.Tracef("domain %s hit domain(full) rule: %s", target, domain)
-				return true
-			}
+			m.full[d.GetValue()] = struct{}{}
 		case v2router.Domain_Domain:
-			domain := d.GetValue()
-			if strings.HasSuffix(target, domain) {
-				idx := strings.Index(target, domain)
-				if idx == 0 || target[idx-1] == '.' {
-					log.Tracef("domain %s hit domain rule: %s", target, domain)
-					return true
-				}
-			}
+			m.suffix[d.GetValue()] = struct{}{}
 		case v2router.Domain_Plain:
-			// keyword
-			if strings.Contains(target, d.GetValue()) {
-				log.Tracef("domain %s hit keyword rule: %s", target, d.GetValue())
-				return true
-			}
+			m.keyword = append(m.keyword, d.GetValue())
 		case v2router.Domain_Regex:
-			matched, err := regexp.Match(d.GetValue(), []byte(target))
+			re, err := regexp.Compile(d.GetValue())
 			if err != nil {
-				log.Error("invalid regex", d.GetValue())
-				return false
+				log.Error(common.NewError("invalid regular expression: " + d.GetValue()).Base(err))
+				continue
 			}
-			if matched {
-				log.Tracef("domain %s hit regex rule: %s", target, d.GetValue())
-				return true
-			}
+			m.regex = append(m.regex, re)
 		default:
 			log.Debug("unknown rule type:", d.GetType().String())
+		}
+	}
+	return m
+}
+
+func (m *domainMatcher) match(target string) bool {
+	if _, ok := m.full[target]; ok {
+		log.Tracef("domain %s hit domain(full) rule", target)
+		return true
+	}
+	if _, ok := m.suffix[target]; ok {
+		log.Tracef("domain %s hit domain rule: %s", target, target)
+		return true
+	}
+	offset := 0
+	for i := 0; i < len(target); i++ {
+		if target[i] != '.' {
+			continue
+		}
+		offset = i + 1
+		if _, ok := m.suffix[target[offset:]]; ok {
+			log.Tracef("domain %s hit domain rule: %s", target, target[offset:])
+			return true
+		}
+	}
+	for _, name := range m.keyword {
+		if strings.Contains(target, name) {
+			log.Tracef("domain %s hit keyword rule: %s", target, name)
+			return true
+		}
+	}
+	for _, re := range m.regex {
+		if re.MatchString(target) {
+			log.Tracef("domain %s hit regex rule: %s", target, re.String())
+			return true
 		}
 	}
 	return false
 }
 
-func matchIP(list []*v2router.CIDR, target net.IP) bool {
-	isIPv6 := true
-	len := net.IPv6len
-	if target.To4() != nil {
-		len = net.IPv4len
-		isIPv6 = false
+// ipMatcher groups CIDRs by prefix length and masks the target once per
+// distinct length, so a lookup costs a few map reads instead of a scan
+type ipMatcher struct {
+	v4 map[int]map[uint32]struct{}
+	v6 map[int]map[[16]byte]struct{}
+}
+
+func maskV4(bits int) uint32 {
+	if bits <= 0 {
+		return 0
+	}
+	return ^uint32(0) << (32 - bits)
+}
+
+func maskBytes(b []byte, bits int) {
+	for i := 0; i < len(b); i++ {
+		if bits >= 8 {
+			bits -= 8
+			continue
+		}
+		if bits <= 0 {
+			b[i] = 0
+			continue
+		}
+		b[i] &= byte(0xff << (8 - bits))
+		bits = 0
+	}
+}
+
+func newIPMatcher(list []*v2router.CIDR) *ipMatcher {
+	m := &ipMatcher{
+		v4: make(map[int]map[uint32]struct{}),
+		v6: make(map[int]map[[16]byte]struct{}),
 	}
 	for _, c := range list {
-		n := int(c.GetPrefix())
-		mask := net.CIDRMask(n, 8*len)
-		cidrIP := net.IP(c.GetIp())
-		if cidrIP.To4() != nil { // IPv4 CIDR
-			if isIPv6 {
+		bits := int(c.GetPrefix())
+		ip := net.IP(c.GetIp())
+		if ip4 := ip.To4(); ip4 != nil {
+			if bits < 0 || bits > 32 {
 				continue
 			}
-		} else { // IPv6 CIDR
-			if !isIPv6 {
-				continue
+			set, ok := m.v4[bits]
+			if !ok {
+				set = make(map[uint32]struct{})
+				m.v4[bits] = set
+			}
+			set[binary.BigEndian.Uint32(ip4)&maskV4(bits)] = struct{}{}
+			continue
+		}
+		ip16 := ip.To16()
+		if ip16 == nil || bits < 0 || bits > 128 {
+			continue
+		}
+		set, ok := m.v6[bits]
+		if !ok {
+			set = make(map[[16]byte]struct{})
+			m.v6[bits] = set
+		}
+		var key [16]byte
+		copy(key[:], ip16)
+		maskBytes(key[:], bits)
+		set[key] = struct{}{}
+	}
+	return m
+}
+
+func (m *ipMatcher) match(target net.IP) bool {
+	if ip4 := target.To4(); ip4 != nil {
+		value := binary.BigEndian.Uint32(ip4)
+		for bits, set := range m.v4 {
+			if _, ok := set[value&maskV4(bits)]; ok {
+				return true
 			}
 		}
-		subnet := &net.IPNet{IP: cidrIP.Mask(mask), Mask: mask}
-		if subnet.Contains(target) {
+		return false
+	}
+	ip16 := target.To16()
+	if ip16 == nil {
+		return false
+	}
+	var key [16]byte
+	copy(key[:], ip16)
+	for bits, set := range m.v6 {
+		masked := key
+		maskBytes(masked[:], bits)
+		if _, ok := set[masked]; ok {
 			return true
 		}
 	}
@@ -103,15 +206,28 @@ func matchIP(list []*v2router.CIDR, target net.IP) bool {
 }
 
 func newIPAddress(address *tunnel.Address) (*tunnel.Address, error) {
-	ip, err := address.ResolveIP()
-	if err != nil {
-		return nil, common.NewError("router failed to resolve ip").Base(err)
+	if address.AddressType != tunnel.DomainName {
+		return address, nil
+	}
+	if address.IP == nil {
+		ctx, cancel := context.WithTimeout(context.Background(), resolveTimeout)
+		defer cancel()
+		ips, err := net.DefaultResolver.LookupIPAddr(ctx, address.DomainName)
+		if err != nil {
+			return nil, common.NewError("router failed to resolve ip").Base(err)
+		}
+		if len(ips) == 0 {
+			return nil, common.NewError("router failed to resolve ip: no record")
+		}
+		// cache the result on the address, so udp sessions do not resolve the
+		// same domain for every packet
+		address.IP = ips[0].IP
 	}
 	newAddress := &tunnel.Address{
-		IP:   ip,
+		IP:   address.IP,
 		Port: address.Port,
 	}
-	if ip.To4() != nil {
+	if newAddress.IP.To4() != nil {
 		newAddress.AddressType = tunnel.IPv4
 	} else {
 		newAddress.AddressType = tunnel.IPv6
@@ -120,8 +236,8 @@ func newIPAddress(address *tunnel.Address) (*tunnel.Address, error) {
 }
 
 type Client struct {
-	domains        [3][]*v2router.Domain
-	cidrs          [3][]*v2router.CIDR
+	domains        [3]*domainMatcher
+	ips            [3]*ipMatcher
 	defaultPolicy  int
 	domainStrategy int
 	underlay       tunnel.Client
@@ -133,25 +249,23 @@ type Client struct {
 func (c *Client) Route(address *tunnel.Address) int {
 	if address.AddressType == tunnel.DomainName {
 		if c.domainStrategy == IPOnDemand {
-			resolvedIP, err := newIPAddress(address)
-			if err == nil {
+			if resolvedIP, err := newIPAddress(address); err == nil {
 				for i := Block; i <= Proxy; i++ {
-					if matchIP(c.cidrs[i], resolvedIP.IP) {
+					if c.ips[i].match(resolvedIP.IP) {
 						return i
 					}
 				}
 			}
 		}
 		for i := Block; i <= Proxy; i++ {
-			if matchDomain(c.domains[i], address.DomainName) {
+			if c.domains[i].match(address.DomainName) {
 				return i
 			}
 		}
 		if c.domainStrategy == IPIfNonMatch {
-			resolvedIP, err := newIPAddress(address)
-			if err == nil {
+			if resolvedIP, err := newIPAddress(address); err == nil {
 				for i := Block; i <= Proxy; i++ {
-					if matchIP(c.cidrs[i], resolvedIP.IP) {
+					if c.ips[i].match(resolvedIP.IP) {
 						return i
 					}
 				}
@@ -159,7 +273,7 @@ func (c *Client) Route(address *tunnel.Address) int {
 		}
 	} else {
 		for i := Block; i <= Proxy; i++ {
-			if matchIP(c.cidrs[i], address.IP) {
+			if c.ips[i].match(address.IP) {
 				return i
 			}
 		}
@@ -275,9 +389,9 @@ func NewClient(ctx context.Context, underlay tunnel.Client) (*Client, error) {
 		return nil, common.NewError("router failed to initialize raw client").Base(err)
 	}
 
+	var rawDomains [3][]*v2router.Domain
+	var rawCIDRs [3][]*v2router.CIDR
 	client := &Client{
-		domains:  [3][]*v2router.Domain{},
-		cidrs:    [3][]*v2router.CIDR{},
 		underlay: underlay,
 		direct:   direct,
 		ctx:      ctx,
@@ -317,7 +431,7 @@ func NewClient(ctx context.Context, underlay tunnel.Client) (*Client, error) {
 			log.Error(err)
 		} else {
 			log.Infof("geoip:%s loaded", code)
-			client.cidrs[c.strategy] = append(client.cidrs[c.strategy], cidrs...)
+			rawCIDRs[c.strategy] = append(rawCIDRs[c.strategy], cidrs...)
 		}
 	}
 
@@ -350,13 +464,13 @@ func NewClient(ctx context.Context, underlay tunnel.Client) (*Client, error) {
 				for _, domain := range domainList {
 					for _, attr := range domain.GetAttribute() {
 						if strings.EqualFold(attrWanted, attr.GetKey()) {
-							client.domains[c.strategy] = append(client.domains[c.strategy], domain)
+							rawDomains[c.strategy] = append(rawDomains[c.strategy], domain)
 							found = true
 						}
 					}
 				}
 			} else {
-				client.domains[c.strategy] = append(client.domains[c.strategy], domainList...)
+				rawDomains[c.strategy] = append(rawDomains[c.strategy], domainList...)
 				found = true
 			}
 			if found {
@@ -371,7 +485,7 @@ func NewClient(ctx context.Context, underlay tunnel.Client) (*Client, error) {
 
 	domainInfo := loadCode(cfg, "domain:")
 	for _, info := range domainInfo {
-		client.domains[info.strategy] = append(client.domains[info.strategy], &v2router.Domain{
+		rawDomains[info.strategy] = append(rawDomains[info.strategy], &v2router.Domain{
 			Type:      v2router.Domain_Domain,
 			Value:     strings.ToLower(info.code),
 			Attribute: nil,
@@ -380,7 +494,7 @@ func NewClient(ctx context.Context, underlay tunnel.Client) (*Client, error) {
 
 	keywordInfo := loadCode(cfg, "keyword:")
 	for _, info := range keywordInfo {
-		client.domains[info.strategy] = append(client.domains[info.strategy], &v2router.Domain{
+		rawDomains[info.strategy] = append(rawDomains[info.strategy], &v2router.Domain{
 			Type:      v2router.Domain_Plain,
 			Value:     strings.ToLower(info.code),
 			Attribute: nil,
@@ -392,7 +506,7 @@ func NewClient(ctx context.Context, underlay tunnel.Client) (*Client, error) {
 		if _, err := regexp.Compile(info.code); err != nil {
 			return nil, common.NewError("invalid regular expression: " + info.code).Base(err)
 		}
-		client.domains[info.strategy] = append(client.domains[info.strategy], &v2router.Domain{
+		rawDomains[info.strategy] = append(rawDomains[info.strategy], &v2router.Domain{
 			Type:      v2router.Domain_Regex,
 			Value:     info.code,
 			Attribute: nil,
@@ -405,7 +519,7 @@ func NewClient(ctx context.Context, underlay tunnel.Client) (*Client, error) {
 		if _, err := regexp.Compile(info.code); err != nil {
 			return nil, common.NewError("invalid regular expression: " + info.code).Base(err)
 		}
-		client.domains[info.strategy] = append(client.domains[info.strategy], &v2router.Domain{
+		rawDomains[info.strategy] = append(rawDomains[info.strategy], &v2router.Domain{
 			Type:      v2router.Domain_Regex,
 			Value:     info.code,
 			Attribute: nil,
@@ -414,7 +528,7 @@ func NewClient(ctx context.Context, underlay tunnel.Client) (*Client, error) {
 
 	fullInfo := loadCode(cfg, "full:")
 	for _, info := range fullInfo {
-		client.domains[info.strategy] = append(client.domains[info.strategy], &v2router.Domain{
+		rawDomains[info.strategy] = append(rawDomains[info.strategy], &v2router.Domain{
 			Type:      v2router.Domain_Full,
 			Value:     strings.ToLower(info.code),
 			Attribute: nil,
@@ -435,10 +549,15 @@ func NewClient(ctx context.Context, underlay tunnel.Client) (*Client, error) {
 		if err != nil {
 			return nil, common.NewError("invalid prefix").Base(err)
 		}
-		client.cidrs[info.strategy] = append(client.cidrs[info.strategy], &v2router.CIDR{
+		rawCIDRs[info.strategy] = append(rawCIDRs[info.strategy], &v2router.CIDR{
 			Ip:     ip,
 			Prefix: uint32(prefix),
 		})
+	}
+
+	for i := range rawDomains {
+		client.domains[i] = newDomainMatcher(rawDomains[i])
+		client.ips[i] = newIPMatcher(rawCIDRs[i])
 	}
 
 	log.Info("router client created")

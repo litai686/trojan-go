@@ -39,14 +39,24 @@ type Client struct {
 	cancel         context.CancelFunc
 }
 
+func closeMuxClients(infos []*smuxClientInfo) {
+	for _, info := range infos {
+		info.client.Close()
+		info.underlayConn.Close()
+		log.Debug("mux client", info.id, "closed")
+	}
+}
+
 func (c *Client) Close() error {
 	c.cancel()
 	c.clientPoolLock.Lock()
-	defer c.clientPoolLock.Unlock()
+	infos := make([]*smuxClientInfo, 0, len(c.clientPool))
 	for id, info := range c.clientPool {
-		info.client.Close()
-		log.Debug("mux client", id, "closed")
+		delete(c.clientPool, id)
+		infos = append(infos, info)
 	}
+	c.clientPoolLock.Unlock()
+	closeMuxClients(infos)
 	return nil
 }
 
@@ -63,16 +73,15 @@ func (c *Client) cleanLoop() {
 		select {
 		case <-time.After(checkDuration):
 			c.clientPoolLock.Lock()
+			dead := make([]*smuxClientInfo, 0)
 			for id, info := range c.clientPool {
 				if info.client.IsClosed() {
-					info.client.Close()
-					info.underlayConn.Close()
 					delete(c.clientPool, id)
+					dead = append(dead, info)
 					log.Info("mux client", id, "is dead")
 				} else if info.client.NumStreams() == 0 && time.Since(info.lastActiveTime) > c.timeout {
-					info.client.Close()
-					info.underlayConn.Close()
 					delete(c.clientPool, id)
+					dead = append(dead, info)
 					log.Info("mux client", id, "is closed due to inactivity")
 				}
 			}
@@ -81,16 +90,19 @@ func (c *Client) cleanLoop() {
 				log.Debug(fmt.Sprintf("  - %x: %d/%d", id, info.client.NumStreams(), c.concurrency))
 			}
 			c.clientPoolLock.Unlock()
+			// sessions are closed outside the lock: closing one writes a padding
+			// frame to the underlay, which must never block the whole pool
+			closeMuxClients(dead)
 		case <-c.ctx.Done():
 			log.Debug("shutting down mux cleaner..")
 			c.clientPoolLock.Lock()
+			dead := make([]*smuxClientInfo, 0, len(c.clientPool))
 			for id, info := range c.clientPool {
-				info.client.Close()
-				info.underlayConn.Close()
 				delete(c.clientPool, id)
-				log.Debug("mux client", id, "closed")
+				dead = append(dead, info)
 			}
 			c.clientPoolLock.Unlock()
+			closeMuxClients(dead)
 			return
 		}
 	}
@@ -115,7 +127,11 @@ func (c *Client) newMuxClient() (*smuxClientInfo, error) {
 
 	smuxConfig := smux.DefaultConfig()
 	// smuxConfig.KeepAliveDisabled = true
-	client, _ := smux.Client(conn, smuxConfig)
+	client, err := smux.Client(conn, smuxConfig)
+	if err != nil {
+		conn.Close()
+		return nil, common.NewError("mux failed to create session").Base(err)
+	}
 	info := &smuxClientInfo{
 		client:         client,
 		underlayConn:   conn,

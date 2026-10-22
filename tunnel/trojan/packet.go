@@ -6,11 +6,19 @@ import (
 	"io"
 	"io/ioutil"
 	"net"
+	"sync"
 
 	"github.com/p4gefau1t/trojan-go/common"
 	"github.com/p4gefau1t/trojan-go/log"
 	"github.com/p4gefau1t/trojan-go/tunnel"
 )
+
+// packetBufferPool avoids an 8KB allocation for every udp packet
+var packetBufferPool = sync.Pool{
+	New: func() interface{} {
+		return make([]byte, MaxPacketSize+512)
+	},
+}
 
 type PacketConn struct {
 	tunnel.Conn
@@ -32,8 +40,8 @@ func (c *PacketConn) WriteTo(payload []byte, addr net.Addr) (int, error) {
 }
 
 func (c *PacketConn) WriteWithMetadata(payload []byte, metadata *tunnel.Metadata) (int, error) {
-	packet := make([]byte, 0, MaxPacketSize)
-	w := bytes.NewBuffer(packet)
+	buf := packetBufferPool.Get().([]byte)
+	w := bytes.NewBuffer(buf[:0])
 	metadata.Address.WriteTo(w)
 
 	length := len(payload)
@@ -45,7 +53,9 @@ func (c *PacketConn) WriteWithMetadata(payload []byte, metadata *tunnel.Metadata
 	w.Write(crlf[:])
 	w.Write(payload)
 
-	_, err := c.Conn.Write(w.Bytes())
+	packet := w.Bytes()
+	_, err := c.Conn.Write(packet)
+	packetBufferPool.Put(packet[:cap(packet)])
 
 	log.Debug("udp packet remote", c.RemoteAddr(), "metadata", metadata, "size", length)
 	return len(payload), err

@@ -41,6 +41,7 @@ type Server struct {
 	sessionTicket      bool
 	curve              []tls.CurveID
 	keyLogger          io.WriteCloser
+	tlsConfig          *tls.Config
 	connChan           chan tunnel.Conn
 	wsChan             chan tunnel.Conn
 	redir              *redirector.Redirector
@@ -72,49 +73,24 @@ func (s *Server) acceptLoop() {
 	for {
 		conn, err := s.underlay.AcceptConn(&Tunnel{})
 		if err != nil {
-			select {
-			case <-s.ctx.Done():
-			default:
-				log.Fatal(common.NewError("transport accept error" + err.Error()))
+			if s.ctx.Err() != nil {
+				return
 			}
-			return
+			// a transient accept error must not terminate the process
+			log.Error(common.NewError("tls failed to accept connection").Base(err))
+			time.Sleep(time.Millisecond * 100)
+			continue
 		}
 		go func(conn net.Conn) {
-			tlsConfig := &tls.Config{
-				CipherSuites:             s.cipherSuite,
-				PreferServerCipherSuites: s.PreferServerCipher,
-				SessionTicketsDisabled:   !s.sessionTicket,
-				NextProtos:               s.alpn,
-				KeyLogWriter:             s.keyLogger,
-				GetCertificate: func(hello *tls.ClientHelloInfo) (*tls.Certificate, error) {
-					s.keyPairLock.RLock()
-					defer s.keyPairLock.RUnlock()
-					sni := s.keyPair[0].Leaf.Subject.CommonName
-					dnsNames := s.keyPair[0].Leaf.DNSNames
-					if s.sni != "" {
-						sni = s.sni
-					}
-					matched := isDomainNameMatched(sni, hello.ServerName)
-					for _, name := range dnsNames {
-						if isDomainNameMatched(name, hello.ServerName) {
-							matched = true
-							break
-						}
-					}
-					if s.verifySNI && !matched {
-						return nil, common.NewError("sni mismatched: " + hello.ServerName + ", expected: " + s.sni)
-					}
-					return &s.keyPair[0], nil
-				},
-			}
-
 			// ------------------------ WAR ZONE ----------------------------
 
 			handshakeRewindConn := common.NewRewindConn(conn)
 			handshakeRewindConn.SetBufferSize(2048)
 
-			tlsConn := tls.Server(handshakeRewindConn, tlsConfig)
+			tlsConn := tls.Server(handshakeRewindConn, s.tlsConfig)
+			conn.SetDeadline(time.Now().Add(handshakeTimeout))
 			err = tlsConn.Handshake()
+			conn.SetDeadline(time.Time{})
 			handshakeRewindConn.StopBuffering()
 
 			if err != nil {
@@ -146,6 +122,15 @@ func (s *Server) acceptLoop() {
 			state := tlsConn.ConnectionState()
 			log.Trace("tls handshake", tls.CipherSuiteName(state.CipherSuite), state.DidResume, state.NegotiatedProtocol)
 
+			if atomic.LoadInt32(&s.nextHTTP) != 1 && s.fallbackAddress == nil {
+				// no websocket layer waiting and no fallback site to serve,
+				// skip the http sniff completely
+				s.connChan <- &transport.Conn{
+					Conn: tlsConn,
+				}
+				return
+			}
+
 			// we use a real http header parser to mimic a real http server
 			rewindConn := common.NewRewindConn(tlsConn)
 			rewindConn.SetBufferSize(1024)
@@ -162,10 +147,14 @@ func (s *Server) acceptLoop() {
 				if atomic.LoadInt32(&s.nextHTTP) != 1 {
 					// there is no websocket layer waiting for connections, redirect it
 					log.Error("incoming http request, but no websocket server is listening")
-					s.redir.Redirect(&redirector.Redirection{
-						InboundConn: rewindConn,
-						RedirectTo:  s.fallbackAddress,
-					})
+					if s.fallbackAddress != nil {
+						s.redir.Redirect(&redirector.Redirection{
+							InboundConn: rewindConn,
+							RedirectTo:  s.fallbackAddress,
+						})
+					} else {
+						rewindConn.Close()
+					}
 					return
 				}
 				// this is a http request, pass it to websocket protocol layer
@@ -206,39 +195,35 @@ func (s *Server) AcceptPacket(tunnel.Tunnel) (tunnel.PacketConn, error) {
 func (s *Server) checkKeyPairLoop(checkRate time.Duration, keyPath string, certPath string, password string) {
 	var lastKeyBytes, lastCertBytes []byte
 	ticker := time.NewTicker(checkRate)
+	defer ticker.Stop()
 
 	for {
 		log.Debug("checking cert...")
 		keyBytes, err := ioutil.ReadFile(keyPath)
 		if err != nil {
 			log.Error(common.NewError("tls failed to check key").Base(err))
-			continue
-		}
-		certBytes, err := ioutil.ReadFile(certPath)
-		if err != nil {
+		} else if certBytes, err := ioutil.ReadFile(certPath); err != nil {
 			log.Error(common.NewError("tls failed to check cert").Base(err))
-			continue
-		}
-		if !bytes.Equal(keyBytes, lastKeyBytes) || !bytes.Equal(lastCertBytes, certBytes) {
+		} else if !bytes.Equal(keyBytes, lastKeyBytes) || !bytes.Equal(lastCertBytes, certBytes) {
 			log.Info("new key pair detected")
 			keyPair, err := loadKeyPair(keyPath, certPath, password)
 			if err != nil {
+				// keep waiting for the next tick instead of reading the files in a
+				// tight loop when they are unreadable or malformed
 				log.Error(common.NewError("tls failed to load new key pair").Base(err))
-				continue
+			} else {
+				s.keyPairLock.Lock()
+				s.keyPair = []tls.Certificate{*keyPair}
+				s.keyPairLock.Unlock()
+				lastKeyBytes = keyBytes
+				lastCertBytes = certBytes
 			}
-			s.keyPairLock.Lock()
-			s.keyPair = []tls.Certificate{*keyPair}
-			s.keyPairLock.Unlock()
-			lastKeyBytes = keyBytes
-			lastCertBytes = certBytes
 		}
 
 		select {
 		case <-ticker.C:
-			continue
 		case <-s.ctx.Done():
 			log.Debug("exiting")
-			ticker.Stop()
 			return
 		}
 	}
@@ -255,17 +240,21 @@ func loadKeyPair(keyPath string, certPath string, password string) (*tls.Certifi
 			return nil, common.NewError("failed to decode key file").Base(err)
 		}
 		decryptedKey, err := x509.DecryptPEMBlock(keyBlock, []byte(password))
-		if err == nil {
+		if err != nil {
 			return nil, common.NewError("failed to decrypt key").Base(err)
 		}
 
 		certFile, err := ioutil.ReadFile(certPath)
-		certBlock, _ := pem.Decode(certFile)
-		if certBlock == nil {
-			return nil, common.NewError("failed to decode cert file").Base(err)
+		if err != nil {
+			return nil, common.NewError("failed to read cert file").Base(err)
 		}
 
-		keyPair, err := tls.X509KeyPair(certBlock.Bytes, decryptedKey)
+		// X509KeyPair expects PEM, so re-encode the decrypted DER key
+		keyPEM := pem.EncodeToMemory(&pem.Block{
+			Type:  keyBlock.Type,
+			Bytes: decryptedKey,
+		})
+		keyPair, err := tls.X509KeyPair(certFile, keyPEM)
 		if err != nil {
 			return nil, err
 		}
@@ -355,6 +344,35 @@ func NewServer(ctx context.Context, underlay tunnel.Server) (*Server, error) {
 		cipherSuite:        cipherSuite,
 		ctx:                ctx,
 		cancel:             cancel,
+	}
+
+	// the config is immutable after startup, so every handshake can share it
+	server.tlsConfig = &tls.Config{
+		CipherSuites:             server.cipherSuite,
+		PreferServerCipherSuites: server.PreferServerCipher,
+		SessionTicketsDisabled:   !server.sessionTicket,
+		NextProtos:               server.alpn,
+		KeyLogWriter:             server.keyLogger,
+		GetCertificate: func(hello *tls.ClientHelloInfo) (*tls.Certificate, error) {
+			server.keyPairLock.RLock()
+			defer server.keyPairLock.RUnlock()
+			sni := server.keyPair[0].Leaf.Subject.CommonName
+			dnsNames := server.keyPair[0].Leaf.DNSNames
+			if server.sni != "" {
+				sni = server.sni
+			}
+			matched := isDomainNameMatched(sni, hello.ServerName)
+			for _, name := range dnsNames {
+				if isDomainNameMatched(name, hello.ServerName) {
+					matched = true
+					break
+				}
+			}
+			if server.verifySNI && !matched {
+				return nil, common.NewError("sni mismatched: " + hello.ServerName + ", expected: " + server.sni)
+			}
+			return &server.keyPair[0], nil
+		},
 	}
 
 	go server.acceptLoop()

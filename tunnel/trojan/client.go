@@ -28,6 +28,11 @@ const (
 	Mux       tunnel.Command = 0x7f
 )
 
+// headerFlushDelay gives the first payload a short window to be coalesced with
+// the trojan header into a single tls record, while still letting protocols
+// that wait for the server to speak first start without a long stall
+const headerFlushDelay = time.Millisecond * 20
+
 type OutboundConn struct {
 	// WARNING: do not change the order of these fields.
 	// 64-bit fields that use `sync/atomic` package functions
@@ -39,7 +44,9 @@ type OutboundConn struct {
 
 	metadata          *tunnel.Metadata
 	user              statistic.User
-	headerWrittenOnce sync.Once
+	headerMutex       sync.Mutex
+	headerWritten     bool
+	headerTimer       *time.Timer
 	net.Conn
 }
 
@@ -47,34 +54,48 @@ func (c *OutboundConn) Metadata() *tunnel.Metadata {
 	return c.metadata
 }
 
+// writeHeader must be called with headerMutex held so that the header is
+// always written before any payload on the wire
+func (c *OutboundConn) writeHeader(payload []byte) (bool, error) {
+	if c.headerWritten {
+		return false, nil
+	}
+	hash := c.user.Hash()
+	buf := bytes.NewBuffer(make([]byte, 0, MaxPacketSize))
+	crlf := []byte{0x0d, 0x0a}
+	buf.Write([]byte(hash))
+	buf.Write(crlf)
+	c.metadata.WriteTo(buf)
+	buf.Write(crlf)
+	if payload != nil {
+		buf.Write(payload)
+	}
+	if _, err := c.Conn.Write(buf.Bytes()); err != nil {
+		return false, err
+	}
+	c.headerWritten = true
+	return true, nil
+}
+
 func (c *OutboundConn) WriteHeader(payload []byte) (bool, error) {
-	var err error
-	written := false
-	c.headerWrittenOnce.Do(func() {
-		hash := c.user.Hash()
-		buf := bytes.NewBuffer(make([]byte, 0, MaxPacketSize))
-		crlf := []byte{0x0d, 0x0a}
-		buf.Write([]byte(hash))
-		buf.Write(crlf)
-		c.metadata.WriteTo(buf)
-		buf.Write(crlf)
-		if payload != nil {
-			buf.Write(payload)
-		}
-		_, err = c.Conn.Write(buf.Bytes())
-		if err == nil {
-			written = true
-		}
-	})
-	return written, err
+	c.headerMutex.Lock()
+	defer c.headerMutex.Unlock()
+	return c.writeHeader(payload)
 }
 
 func (c *OutboundConn) Write(p []byte) (int, error) {
-	written, err := c.WriteHeader(p)
+	c.headerMutex.Lock()
+	defer c.headerMutex.Unlock()
+	written, err := c.writeHeader(p)
 	if err != nil {
 		return 0, common.NewError("trojan failed to flush header with payload").Base(err)
 	}
 	if written {
+		if c.headerTimer != nil {
+			c.headerTimer.Stop()
+		}
+		c.user.AddTraffic(len(p), 0)
+		atomic.AddUint64(&c.sent, uint64(len(p)))
 		return len(p), nil
 	}
 	n, err := c.Conn.Write(p)
@@ -90,7 +111,26 @@ func (c *OutboundConn) Read(p []byte) (int, error) {
 	return n, err
 }
 
+// CloseWrite flushes a pending trojan header and propagates the half close
+func (c *OutboundConn) CloseWrite() error {
+	c.headerMutex.Lock()
+	if !c.headerWritten {
+		if _, err := c.writeHeader(nil); err != nil {
+			c.headerMutex.Unlock()
+			return err
+		}
+	}
+	c.headerMutex.Unlock()
+	if cw, ok := c.Conn.(interface{ CloseWrite() error }); ok {
+		return cw.CloseWrite()
+	}
+	return common.ErrCloseWriteNotSupported
+}
+
 func (c *OutboundConn) Close() error {
+	if c.headerTimer != nil {
+		c.headerTimer.Stop()
+	}
 	log.Info("connection to", c.metadata, "closed", "sent:", common.HumanFriendlyTraffic(atomic.LoadUint64(&c.sent)), "recv:", common.HumanFriendlyTraffic(atomic.LoadUint64(&c.recv)))
 	return c.Conn.Close()
 }
@@ -124,12 +164,11 @@ func (c *Client) DialConn(addr *tunnel.Address, overlay tunnel.Tunnel) (tunnel.C
 		newConn.metadata.Command = Mux
 	}
 
-	go func(newConn *OutboundConn) {
-		// if the trojan header is still buffered after 100 ms, the client may expect data from the server
-		// so we flush the trojan header
-		time.Sleep(time.Millisecond * 100)
+	// if the trojan header has not been flushed together with the first payload
+	// after a short delay, the peer may expect the server to speak first
+	newConn.headerTimer = time.AfterFunc(headerFlushDelay, func() {
 		newConn.WriteHeader(nil)
-	}(newConn)
+	})
 	return newConn, nil
 }
 

@@ -36,6 +36,7 @@ type User struct {
 	limiterLock sync.RWMutex
 	sendLimiter *rate.Limiter
 	recvLimiter *rate.Limiter
+	limited     int32
 	ctx         context.Context
 	cancel      context.CancelFunc
 }
@@ -88,14 +89,18 @@ func (u *User) GetIPLimit() int {
 }
 
 func (u *User) AddTraffic(sent, recv int) {
+	if atomic.LoadInt32(&u.limited) == 0 {
+		atomic.AddUint64(&u.sent, uint64(sent))
+		atomic.AddUint64(&u.recv, uint64(recv))
+		return
+	}
 	u.limiterLock.RLock()
-	defer u.limiterLock.RUnlock()
-
-	if u.sendLimiter != nil && sent >= 0 {
+	if sent > 0 && u.sendLimiter != nil {
 		u.sendLimiter.WaitN(u.ctx, sent)
-	} else if u.recvLimiter != nil && recv >= 0 {
+	} else if recv > 0 && u.recvLimiter != nil {
 		u.recvLimiter.WaitN(u.ctx, recv)
 	}
+	u.limiterLock.RUnlock()
 	atomic.AddUint64(&u.sent, uint64(sent))
 	atomic.AddUint64(&u.recv, uint64(recv))
 }
@@ -113,6 +118,11 @@ func (u *User) SetSpeedLimit(send, recv int) {
 		u.recvLimiter = nil
 	} else {
 		u.recvLimiter = rate.NewLimiter(rate.Limit(recv), recv*2)
+	}
+	if u.sendLimiter != nil || u.recvLimiter != nil {
+		atomic.StoreInt32(&u.limited, 1)
+	} else {
+		atomic.StoreInt32(&u.limited, 0)
 	}
 }
 

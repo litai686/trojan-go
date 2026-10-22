@@ -8,6 +8,7 @@ import (
 	"io"
 	"io/ioutil"
 	"strings"
+	"time"
 
 	utls "github.com/refraction-networking/utls"
 
@@ -31,6 +32,10 @@ type Client struct {
 	helloID       utls.ClientHelloID
 	keyLogger     io.WriteCloser
 	underlay      tunnel.Client
+	sessionCache  tls.ClientSessionCache
+	uSessionCache utls.ClientSessionCache
+	tlsConfig     *tls.Config
+	uTLSConfig    *utls.Config
 }
 
 func (c *Client) Close() error {
@@ -52,30 +57,27 @@ func (c *Client) DialConn(_ *tunnel.Address, overlay tunnel.Tunnel) (tunnel.Conn
 
 	if c.fingerprint != "" {
 		// utls fingerprint
-		tlsConn := utls.UClient(conn, &utls.Config{
-			RootCAs:            c.ca,
-			ServerName:         c.sni,
-			InsecureSkipVerify: !c.verify,
-			KeyLogWriter:       c.keyLogger,
-		}, c.helloID)
+		// utls writes to the config during the handshake (SNI, ALPN, cipher
+		// suites, ...), so every connection needs its own copy of it
+		utlsConfig := c.uTLSConfig.Clone()
+		tlsConn := utls.UClient(conn, utlsConfig, c.helloID)
+		conn.SetDeadline(time.Now().Add(handshakeTimeout))
 		if err := tlsConn.Handshake(); err != nil {
+			conn.Close()
 			return nil, common.NewError("tls failed to handshake with remote server").Base(err)
 		}
+		conn.SetDeadline(time.Time{})
 		return &transport.Conn{
 			Conn: tlsConn,
 		}, nil
 	}
 	// golang default tls library
-	tlsConn := tls.Client(conn, &tls.Config{
-		InsecureSkipVerify:     !c.verify,
-		ServerName:             c.sni,
-		RootCAs:                c.ca,
-		KeyLogWriter:           c.keyLogger,
-		CipherSuites:           c.cipher,
-		SessionTicketsDisabled: !c.sessionTicket,
-	})
+	tlsConn := tls.Client(conn, c.tlsConfig)
+	conn.SetDeadline(time.Now().Add(handshakeTimeout))
 	err = tlsConn.Handshake()
+	conn.SetDeadline(time.Time{})
 	if err != nil {
+		conn.Close()
 		return nil, common.NewError("tls failed to handshake with remote server").Base(err)
 	}
 	return &transport.Conn{
@@ -115,6 +117,8 @@ func NewClient(ctx context.Context, underlay tunnel.Client) (*Client, error) {
 		sessionTicket: cfg.TLS.ReuseSession,
 		fingerprint:   cfg.TLS.Fingerprint,
 		helloID:       helloID,
+		sessionCache:  tls.NewLRUClientSessionCache(32),
+		uSessionCache: utls.NewLRUClientSessionCache(32),
 	}
 
 	if cfg.TLS.CertPath != "" {
@@ -150,6 +154,25 @@ func NewClient(ctx context.Context, underlay tunnel.Client) (*Client, error) {
 
 	if cfg.TLS.CertPath == "" {
 		log.Info("cert is unspecified, using default ca list")
+	}
+
+	// the configs are immutable once built, so they can be shared by every
+	// dial instead of being allocated per connection
+	client.tlsConfig = &tls.Config{
+		InsecureSkipVerify:     !client.verify,
+		ServerName:             client.sni,
+		RootCAs:                client.ca,
+		KeyLogWriter:           client.keyLogger,
+		CipherSuites:           client.cipher,
+		SessionTicketsDisabled: !client.sessionTicket,
+		ClientSessionCache:     client.sessionCache,
+	}
+	client.uTLSConfig = &utls.Config{
+		RootCAs:            client.ca,
+		ServerName:         client.sni,
+		InsecureSkipVerify: !client.verify,
+		KeyLogWriter:       client.keyLogger,
+		ClientSessionCache: client.uSessionCache,
 	}
 
 	log.Debug("tls client created")

@@ -113,17 +113,18 @@ func (s *Server) associate(conn net.Conn, addr *tunnel.Address) error {
 }
 
 func (s *Server) packetDispatchLoop() {
+	buf := make([]byte, MaxPacketSize)
 	for {
-		buf := make([]byte, MaxPacketSize)
 		n, src, err := s.listenPacketConn.ReadFrom(buf)
 		if err != nil {
-			select {
-			case <-s.ctx.Done():
+			if s.ctx.Err() != nil {
 				log.Debug("exiting")
 				return
-			default:
-				continue
 			}
+			// back off instead of spinning on a broken socket
+			log.Error(common.NewError("socks failed to read udp packet").Base(err))
+			time.Sleep(time.Millisecond * 100)
+			continue
 		}
 		log.Debug("socks recv udp packet from", src)
 		s.mappingLock.RLock()
@@ -134,13 +135,40 @@ func (s *Server) packetDispatchLoop() {
 			conn = &PacketConn{
 				input:      make(chan *packetInfo, 128),
 				output:     make(chan *packetInfo, 128),
+				touch:      make(chan struct{}, 1),
 				ctx:        ctx,
 				cancel:     cancel,
 				PacketConn: s.listenPacketConn,
 				src:        src,
 			}
 			go func(conn *PacketConn) {
+				defer func() {
+					// only drop our own mapping entry, a newer session may have
+					// replaced it already
+					s.mappingLock.Lock()
+					if cur, ok := s.mapping[src.String()]; ok && cur == conn {
+						delete(s.mapping, src.String())
+					}
+					s.mappingLock.Unlock()
+				}()
 				defer conn.Close()
+
+				timeout := s.timeout
+				if timeout <= 0 {
+					timeout = time.Second * 60
+				}
+				timer := time.NewTimer(timeout)
+				defer timer.Stop()
+				resetTimer := func() {
+					if !timer.Stop() {
+						select {
+						case <-timer.C:
+						default:
+						}
+					}
+					timer.Reset(timeout)
+				}
+
 				for {
 					select {
 					case info := <-conn.output:
@@ -154,11 +182,11 @@ func (s *Server) packetDispatchLoop() {
 							return
 						}
 						log.Debug("socks respond udp packet to", src, "metadata", info.metadata)
-					case <-time.After(time.Second * 5):
+						resetTimer()
+					case <-conn.touch:
+						resetTimer()
+					case <-timer.C:
 						log.Info("socks udp session timeout, closed")
-						s.mappingLock.Lock()
-						delete(s.mapping, src.String())
-						s.mappingLock.Unlock()
 						return
 					case <-conn.ctx.Done():
 						log.Info("socks udp session closed")
@@ -206,6 +234,7 @@ func (s *Server) acceptLoop() {
 			newConn, err := s.handshake(conn)
 			if err != nil {
 				log.Error(common.NewError("socks failed to handshake with client").Base(err))
+				conn.Close()
 				return
 			}
 			log.Info("socks connection from", conn.RemoteAddr(), "metadata", newConn.metadata.String())

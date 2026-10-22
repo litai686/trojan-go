@@ -101,14 +101,10 @@ weight: 30
     "username": "",
     "password": ""
   },
-  "mysql": {
+  "sqlite": {
     "enabled": false,
-    "server_addr": "localhost",
-    "server_port": 3306,
-    "database": "",
-    "username": "",
-    "password": "",
-    "check_rate": 60
+    "database": "trojan-go.db",
+    "check_rate": 30
   },
   "api": {
     "enabled": false,
@@ -149,7 +145,7 @@ weight: 30
 
 ```log_file```指定日志输出文件路径。如果未指定则使用标准输出。
 
-```password```可以填入多个密码。除了使用配置文件配置密码之外，trojan-go还支持使用mysql配置密码，参见下文。客户端的密码，只有与服务端配置文件中或者在数据库中的密码记录一致，才能通过服务端的校验，正常使用代理服务。
+```password```可以填入多个密码。除了使用配置文件配置密码之外，trojan-go还支持使用sqlite配置密码，参见下文。客户端的密码，只有与服务端配置文件中或者在数据库中的密码记录一致，才能通过服务端的校验，正常使用代理服务。
 
 ```disable_http_check```是否禁用HTTP伪装服务器可用性检查。
 
@@ -304,28 +300,26 @@ Websocket传输是trojan-go的特性。在**正常的直接连接代理节点**�
 
 ```prefer_ipv4```是否优先使用IPv4地址。
 
-### ```mysql```数据库选项
+### ```sqlite```数据库选项
 
-trojan-go兼容trojan的基于mysql的用户管理方式，但更推荐的方式是使用API。
+trojan-go使用纯Go实现的SQLite数据库进行用户验证，无需额外的数据库服务，也无需cgo。
 
-```enabled```表示是否启用mysql数据库进行用户验证。
+```enabled```表示是否启用SQLite数据库进行用户验证。
 
-```check_rate```是trojan-go从MySQL获取用户数据并更新缓存的间隔时间，单位为秒。
+```database```是SQLite数据库文件的路径，默认为```trojan-go.db```，文件不存在时会自动创建，users表会在首次启动时自动创建。
 
-其他选项可以顾名思义，不再赘述。
+```check_rate```是trojan-go将流量写回数据库，并从数据库获取用户数据更新缓存的间隔时间，单位为秒。
 
-users表结构和trojan版本定义一致，下面是一个创建users表的例子。注意这里的password指的是密码经过SHA224散列之后的值（字符串），流量download, upload, quota的单位是字节。你可以通过修改数据库users表中的用户记录的方式，添加和删除用户，或者指定用户的流量配额。trojan-go会根据所有的用户流量配额，自动更新当前有效的用户列表。如果download+upload>quota，trojan-go服务器将拒绝该用户的连接。
+users表结构如下。注意这里的password指的是密码经过SHA224散列之后的值（字符串），流量download, upload, quota的单位是字节。你可以通过修改数据库users表中的用户记录的方式，添加和删除用户，或者指定用户的流量配额。trojan-go会根据所有的用户流量配额，自动更新当前有效的用户列表。如果download+upload>quota，trojan-go服务器将拒绝该用户的连接。
 
-```mysql
+```sql
 CREATE TABLE users (
-    id INT UNSIGNED NOT NULL AUTO_INCREMENT,
-    username VARCHAR(64) NOT NULL,
-    password CHAR(56) NOT NULL,
-    quota BIGINT NOT NULL DEFAULT 0,
-    download BIGINT UNSIGNED NOT NULL DEFAULT 0,
-    upload BIGINT UNSIGNED NOT NULL DEFAULT 0,
-    PRIMARY KEY (id),
-    INDEX (password)
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    username TEXT NOT NULL,
+    password TEXT NOT NULL,
+    quota INTEGER NOT NULL DEFAULT 0,
+    download INTEGER NOT NULL DEFAULT 0,
+    upload INTEGER NOT NULL DEFAULT 0
 );
 ```
 

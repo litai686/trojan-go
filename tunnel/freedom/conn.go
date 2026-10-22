@@ -21,6 +21,14 @@ func (c *Conn) Metadata() *tunnel.Metadata {
 	return nil
 }
 
+// CloseWrite propagates the half close to the underlying connection
+func (c *Conn) CloseWrite() error {
+	if cw, ok := c.Conn.(interface{ CloseWrite() error }); ok {
+		return cw.CloseWrite()
+	}
+	return common.ErrCloseWriteNotSupported
+}
+
 type PacketConn struct {
 	*net.UDPConn
 }
@@ -61,6 +69,7 @@ type SocksPacketConn struct {
 	net.PacketConn
 	socksAddr   *net.UDPAddr
 	socksClient *socks5.Client
+	buf         []byte
 }
 
 func (c *SocksPacketConn) WriteWithMetadata(payload []byte, metadata *tunnel.Metadata) (int, error) {
@@ -77,14 +86,16 @@ func (c *SocksPacketConn) WriteWithMetadata(payload []byte, metadata *tunnel.Met
 }
 
 func (c *SocksPacketConn) ReadWithMetadata(payload []byte) (int, *tunnel.Metadata, error) {
-	buf := make([]byte, MaxPacketSize)
-	n, from, err := c.PacketConn.ReadFrom(buf)
+	if c.buf == nil {
+		c.buf = make([]byte, MaxPacketSize)
+	}
+	n, from, err := c.PacketConn.ReadFrom(c.buf)
 	if err != nil {
 		return 0, nil, err
 	}
 	log.Debug("recv udp packet from " + from.String())
 	addr := new(tunnel.Address)
-	r := bytes.NewBuffer(buf[3:n])
+	r := bytes.NewBuffer(c.buf[3:n])
 	if err := addr.ReadFrom(r); err != nil {
 		return 0, nil, common.NewError("socks5 failed to parse addr in the packet").Base(err)
 	}

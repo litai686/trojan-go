@@ -123,6 +123,14 @@ func SetOutput(w io.Writer) {
 	logger.SetOutput(w)
 }
 
+// Flush writes out buffered log lines. It is a no-op for loggers that write
+// synchronously.
+func Flush() {
+	if f, ok := logger.(interface{ Flush() }); ok {
+		f.Flush()
+	}
+}
+
 func RegisterLogger(l Logger) {
 	logger = l
 }

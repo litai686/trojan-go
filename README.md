@@ -18,8 +18,8 @@ Trojan-Go 兼容原版 Trojan 的绝大多数功能，包括但不限于：
 - UDP 代理
 - 透明代理 (NAT 模式，iptables 设置参考[这里](https://github.com/shadowsocks/shadowsocks-libev/tree/v3.3.1#transparent-proxy))
 - 对抗 GFW 被动检测 / 主动检测的机制
-- MySQL 数据持久化方案
-- MySQL 用户权限认证
+- SQLite 数据持久化方案
+- SQLite 用户权限认证
 - 用户流量统计和配额限制
 
 同时，Trojan-Go 还扩展实现了更多高效易用的功能特性：
@@ -274,13 +274,13 @@ Trojan-Go 支持可插拔的传输层插件，并支持 Shadowsocks [SIP003](htt
 
 > 请确保 Go 版本 >= 1.14
 
-使用 `make` 进行编译：
+使用 `build.sh` 进行编译：
 
 ```shell
 git clone https://github.com/p4gefau1t/trojan-go.git
 cd trojan-go
-make
-make install #安装systemd服务等，可选
+./build.sh
+sudo ./build.sh --install #安装可执行文件到 /usr/local/bin，可选
 ```
 
 或者使用 Go 自行编译：

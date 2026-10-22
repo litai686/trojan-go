@@ -40,4 +40,4 @@ jobs:
           go mod verify
 
       - name: Test
-        run: make test
+        run: go test -v ./...

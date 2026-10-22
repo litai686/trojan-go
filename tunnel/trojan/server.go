@@ -6,6 +6,7 @@ import (
 	"io"
 	"net"
 	"sync/atomic"
+	"time"
 
 	"github.com/p4gefau1t/trojan-go/api"
 	"github.com/p4gefau1t/trojan-go/common"
@@ -14,10 +15,14 @@ import (
 	"github.com/p4gefau1t/trojan-go/redirector"
 	"github.com/p4gefau1t/trojan-go/statistic"
 	"github.com/p4gefau1t/trojan-go/statistic/memory"
-	"github.com/p4gefau1t/trojan-go/statistic/mysql"
+	"github.com/p4gefau1t/trojan-go/statistic/sqlite"
 	"github.com/p4gefau1t/trojan-go/tunnel"
 	"github.com/p4gefau1t/trojan-go/tunnel/mux"
 )
+
+// authTimeout bounds how long the trojan header may take to arrive, so a client
+// that never completes it cannot hold the connection forever
+const authTimeout = time.Second * 10
 
 // InboundConn is a trojan inbound connection
 type InboundConn struct {
@@ -55,6 +60,14 @@ func (c *InboundConn) Read(p []byte) (int, error) {
 	return n, err
 }
 
+// CloseWrite propagates the half close to the underlying connection
+func (c *InboundConn) CloseWrite() error {
+	if cw, ok := c.Conn.(interface{ CloseWrite() error }); ok {
+		return cw.CloseWrite()
+	}
+	return common.ErrCloseWriteNotSupported
+}
+
 func (c *InboundConn) Close() error {
 	log.Info("user", c.hash, "from", c.Conn.RemoteAddr(), "tunneling to", c.metadata.Address, "closed",
 		"sent:", common.HumanFriendlyTraffic(atomic.LoadUint64(&c.sent)), "recv:", common.HumanFriendlyTraffic(atomic.LoadUint64(&c.recv)))
@@ -64,8 +77,7 @@ func (c *InboundConn) Close() error {
 
 func (c *InboundConn) Auth() error {
 	userHash := [56]byte{}
-	n, err := c.Conn.Read(userHash[:])
-	if err != nil || n != 56 {
+	if _, err := io.ReadFull(c.Conn, userHash[:]); err != nil {
 		return common.NewError("failed to read hash").Base(err)
 	}
 
@@ -127,12 +139,11 @@ func (s *Server) acceptLoop() {
 	for {
 		conn, err := s.underlay.AcceptConn(&Tunnel{})
 		if err != nil { // Closing
-			log.Error(common.NewError("trojan failed to accept conn").Base(err))
-			select {
-			case <-s.ctx.Done():
+			if s.ctx.Err() != nil {
 				return
-			default:
 			}
+			log.Error(common.NewError("trojan failed to accept conn").Base(err))
+			time.Sleep(time.Millisecond * 100)
 			continue
 		}
 		go func(conn tunnel.Conn) {
@@ -145,17 +156,19 @@ func (s *Server) acceptLoop() {
 				auth: s.auth,
 			}
 
-			if err := inboundConn.Auth(); err != nil {
+			conn.SetReadDeadline(time.Now().Add(authTimeout))
+			authErr := inboundConn.Auth()
+			conn.SetReadDeadline(time.Time{})
+			if authErr != nil {
 				rewindConn.Rewind()
 				rewindConn.StopBuffering()
-				log.Warn(common.NewError("connection with invalid trojan header from " + rewindConn.RemoteAddr().String()).Base(err))
+				log.Warn(common.NewError("connection with invalid trojan header from " + rewindConn.RemoteAddr().String()).Base(authErr))
 				s.redir.Redirect(&redirector.Redirection{
 					RedirectTo:  s.redirAddr,
 					InboundConn: rewindConn,
 				})
 				return
 			}
-
 			rewindConn.StopBuffering()
 			switch inboundConn.metadata.Command {
 			case Connect:
@@ -217,9 +230,9 @@ func NewServer(ctx context.Context, underlay tunnel.Server) (*Server, error) {
 	// TODO replace this dirty code
 	var auth statistic.Authenticator
 	var err error
-	if cfg.MySQL.Enabled {
-		log.Debug("mysql enabled")
-		auth, err = statistic.NewAuthenticator(ctx, mysql.Name)
+	if cfg.SQLite.Enabled {
+		log.Debug("sqlite enabled")
+		auth, err = statistic.NewAuthenticator(ctx, sqlite.Name)
 	} else {
 		log.Debug("auth by config file")
 		auth, err = statistic.NewAuthenticator(ctx, memory.Name)

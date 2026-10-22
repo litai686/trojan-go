@@ -3,6 +3,7 @@ package simplesocks
 import (
 	"context"
 	"fmt"
+	"time"
 
 	"github.com/p4gefau1t/trojan-go/common"
 	"github.com/p4gefau1t/trojan-go/log"
@@ -29,11 +30,10 @@ func (s *Server) acceptLoop() {
 		conn, err := s.underlay.AcceptConn(&Tunnel{})
 		if err != nil {
 			log.Error(common.NewError("simplesocks failed to accept connection from underlying tunnel").Base(err))
-			select {
-			case <-s.ctx.Done():
+			if s.ctx.Err() != nil {
 				return
-			default:
 			}
+			time.Sleep(time.Millisecond * 100)
 			continue
 		}
 		metadata := new(tunnel.Metadata)

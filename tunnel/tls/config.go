@@ -1,8 +1,14 @@
 package tls
 
 import (
+	"time"
+
 	"github.com/p4gefau1t/trojan-go/config"
 )
+
+// handshakeTimeout bounds the TLS handshake so a stalled peer cannot block a
+// connection forever
+const handshakeTimeout = time.Second * 10
 
 type Config struct {
 	RemoteHost string          `json:"remote_addr" yaml:"remote-addr"`

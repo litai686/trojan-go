@@ -6,7 +6,7 @@ on:
       - "**/*.go"
       - "go.mod"
       - "go.sum"
-      - "Makefile"
+      - "build.sh"
       - ".github/workflows/nightly-build.yml"
   pull_request:
     types: [opened, synchronize, reopened]
@@ -16,7 +16,7 @@ on:
       - "**/*.go"
       - "go.mod"
       - "go.sum"
-      - "Makefile"
+      - "build.sh"
       - ".github/workflows/nightly-build.yml"
 name: nightly-build
 jobs:
@@ -35,4 +35,4 @@ jobs:
 
       - name: Build
         run: |
-          make release -j$(nproc)
+          bash build.sh --release

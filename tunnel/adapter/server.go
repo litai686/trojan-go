@@ -4,6 +4,7 @@ import (
 	"context"
 	"net"
 	"sync"
+	"time"
 
 	"github.com/p4gefau1t/trojan-go/common"
 	"github.com/p4gefau1t/trojan-go/config"
@@ -29,13 +30,14 @@ func (s *Server) acceptConnLoop() {
 	for {
 		conn, err := s.tcpListener.Accept()
 		if err != nil {
-			select {
-			case <-s.ctx.Done():
+			if s.ctx.Err() != nil {
 				log.Debug("exiting")
 				return
-			default:
-				continue
 			}
+			// back off instead of spinning when the listener keeps failing
+			log.Error(common.NewError("adapter failed to accept connection").Base(err))
+			time.Sleep(time.Millisecond * 100)
+			continue
 		}
 		rewindConn := common.NewRewindConn(conn)
 		rewindConn.SetBufferSize(16)
@@ -45,6 +47,7 @@ func (s *Server) acceptConnLoop() {
 		rewindConn.StopBuffering()
 		if err != nil {
 			log.Error(common.NewError("failed to detect proxy protocol type").Base(err))
+			rewindConn.Close()
 			continue
 		}
 		s.socksLock.RLock()

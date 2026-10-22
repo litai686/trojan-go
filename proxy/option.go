@@ -10,9 +10,9 @@ import (
 	"strings"
 
 	"github.com/p4gefau1t/trojan-go/common"
-	"github.com/p4gefau1t/trojan-go/constant"
 	"github.com/p4gefau1t/trojan-go/log"
 	"github.com/p4gefau1t/trojan-go/option"
+	"github.com/p4gefau1t/trojan-go/version"
 )
 
 type Option struct {
@@ -72,7 +72,7 @@ func (o *Option) Handle() error {
 	}
 
 	if data != nil {
-		log.Info("trojan-go", constant.Version, "initializing")
+		log.Info("trojan-go", version.Version, "initializing")
 		proxy, err := NewProxyFromConfigData(data, isJSON)
 		if err != nil {
 			log.Fatal(err)
@@ -117,7 +117,7 @@ func (o *StdinOption) Handle() error {
 	}
 
 	if o.suppressHint == nil || !*o.suppressHint {
-		fmt.Printf("Trojan-Go %s (%s/%s)\n", constant.Version, runtime.GOOS, runtime.GOARCH)
+		fmt.Printf("Trojan-Go %s (%s/%s)\n", version.Version, runtime.GOOS, runtime.GOARCH)
 		if isJSON {
 			fmt.Println("Reading JSON configuration from stdin.")
 		} else {

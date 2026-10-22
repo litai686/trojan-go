@@ -33,14 +33,25 @@ type FdWriter interface {
 // Logger struct define the underlying storage for single logger
 type Logger struct {
 	mu        sync.RWMutex
+	writeMu   sync.Mutex
 	color     bool
 	out       io.Writer
 	debug     bool
 	timestamp bool
 	quiet     bool
-	buf       colorful.ColorBuffer
 	logLevel  int32
+	logChan   chan logEntry
 }
+
+// logEntry is a formatted line waiting to be flushed, or a barrier when line
+// is nil
+type logEntry struct {
+	line  []byte
+	flush chan struct{}
+}
+
+// logQueueSize is large enough to absorb a burst of per-connection logs
+const logQueueSize = 4096
 
 // Prefix struct define plain and color byte
 type Prefix struct {
@@ -101,11 +112,45 @@ var (
 // New returns new Logger instance with predefined writer output and
 // automatically detect terminal coloring support
 func New(out FdWriter) *Logger {
-	return &Logger{
+	logger := &Logger{
 		color:     terminal.IsTerminal(int(out.Fd())),
 		out:       out,
 		timestamp: true,
+		logChan:   make(chan logEntry, logQueueSize),
 	}
+	go logger.writeLoop()
+	return logger
+}
+
+// writeLoop is the only goroutine touching the output writer, so a slow
+// terminal never blocks the goroutines that emit logs
+func (l *Logger) writeLoop() {
+	for entry := range l.logChan {
+		if entry.line != nil {
+			l.writeLine(entry.line)
+		}
+		if entry.flush != nil {
+			close(entry.flush)
+		}
+	}
+}
+
+// writeLine serializes writes between the writer goroutine and a synchronous
+// message written right before exit
+func (l *Logger) writeLine(line []byte) {
+	l.writeMu.Lock()
+	defer l.writeMu.Unlock()
+	l.mu.RLock()
+	out := l.out
+	l.mu.RUnlock()
+	_, _ = out.Write(line)
+}
+
+// Flush blocks until every queued line has been written out
+func (l *Logger) Flush() {
+	done := make(chan struct{})
+	l.logChan <- logEntry{flush: done}
+	<-done
 }
 
 func (l *Logger) SetLogLevel(level log.LogLevel) {
@@ -204,7 +249,47 @@ func (l *Logger) IsQuiet() bool {
 
 // Output print the actual value
 func (l *Logger) Output(depth int, prefix Prefix, data string) error {
-	// Check if quiet is requested, and try to return no error and be quiet
+	// one more frame is on the stack here (Output itself), so the depth has to
+	// be compensated to keep the reported caller the same as before
+	l.output(depth+1, prefix, data, false)
+	return nil
+}
+
+// output enqueues a formatted line. Important lines (errors, fatal messages)
+// wait for the writer when the queue is full instead of being dropped.
+func (l *Logger) output(depth int, prefix Prefix, data string, important bool) {
+	line := l.format(depth+1, prefix, data)
+	if line == nil {
+		return
+	}
+	select {
+	case l.logChan <- logEntry{line: line}:
+		return
+	default:
+	}
+	if !important {
+		// the output cannot keep up, drop the line instead of blocking a relay
+		// goroutine on a slow terminal
+		return
+	}
+	select {
+	case l.logChan <- logEntry{line: line}:
+	case <-time.After(time.Second):
+	}
+}
+
+// outputSync writes a line immediately, bypassing the async queue. It is used
+// for messages that must not be lost before the process exits.
+func (l *Logger) outputSync(depth int, prefix Prefix, data string) {
+	line := l.format(depth+1, prefix, data)
+	if line == nil {
+		return
+	}
+	l.writeLine(line)
+}
+
+func (l *Logger) format(depth int, prefix Prefix, data string) []byte {
+	// Check if quiet is requested, and try to return nil and be quiet
 	if l.IsQuiet() {
 		return nil
 	}
@@ -229,75 +314,81 @@ func (l *Logger) Output(depth int, prefix Prefix, data string) error {
 			fn = runtime.FuncForPC(pc).Name()
 		}
 	}
-	// Acquire exclusive access to the shared buffer
-	l.mu.Lock()
-	defer l.mu.Unlock()
-	// Reset buffer so it start from the beginning
-	l.buf.Reset()
+	l.mu.RLock()
+	color := l.color
+	timestamp := l.timestamp
+	l.mu.RUnlock()
+
+	// Build the line in a local buffer so formatting never contends with the
+	// writer goroutine
+	buf := colorful.ColorBuffer{}
 	// Write prefix to the buffer
-	if l.color {
-		l.buf.Append(prefix.Color)
+	if color {
+		buf.Append(prefix.Color)
 	} else {
-		l.buf.Append(prefix.Plain)
+		buf.Append(prefix.Plain)
 	}
 	// Check if the log require timestamping
-	if l.timestamp {
-		// Print timestamp color if color enabled
-		if l.color {
-			l.buf.Blue()
+	if timestamp {
+		if color {
+			buf.Blue()
 		}
 		// Print date and time
 		year, month, day := now.Date()
-		l.buf.AppendInt(year, 4)
-		l.buf.AppendByte('/')
-		l.buf.AppendInt(int(month), 2)
-		l.buf.AppendByte('/')
-		l.buf.AppendInt(day, 2)
-		l.buf.AppendByte(' ')
+		buf.AppendInt(year, 4)
+		buf.AppendByte('/')
+		buf.AppendInt(int(month), 2)
+		buf.AppendByte('/')
+		buf.AppendInt(day, 2)
+		buf.AppendByte(' ')
 		hour, min, sec := now.Clock()
-		l.buf.AppendInt(hour, 2)
-		l.buf.AppendByte(':')
-		l.buf.AppendInt(min, 2)
-		l.buf.AppendByte(':')
-		l.buf.AppendInt(sec, 2)
-		l.buf.AppendByte(' ')
+		buf.AppendInt(hour, 2)
+		buf.AppendByte(':')
+		buf.AppendInt(min, 2)
+		buf.AppendByte(':')
+		buf.AppendInt(sec, 2)
+		buf.AppendByte(' ')
 		// Print reset color if color enabled
-		if l.color {
-			l.buf.Off()
+		if color {
+			buf.Off()
 		}
 	}
 	// Add caller filename and line if enabled
 	if prefix.File {
 		// Print color start if enabled
-		if l.color {
-			l.buf.Orange()
+		if color {
+			buf.Orange()
 		}
 		// Print filename and line
-		l.buf.Append([]byte(fn))
-		l.buf.AppendByte(':')
-		l.buf.Append([]byte(file))
-		l.buf.AppendByte(':')
-		l.buf.AppendInt(line, 0)
-		l.buf.AppendByte(' ')
+		buf.Append([]byte(fn))
+		buf.AppendByte(':')
+		buf.Append([]byte(file))
+		buf.AppendByte(':')
+		buf.AppendInt(line, 0)
+		buf.AppendByte(' ')
 		// Print color stop
-		if l.color {
-			l.buf.Off()
+		if color {
+			buf.Off()
 		}
 	}
 	// Print the actual string data from caller
-	l.buf.Append([]byte(data))
+	buf.Append([]byte(data))
 	if len(data) == 0 || data[len(data)-1] != '\n' {
-		l.buf.AppendByte('\n')
+		buf.AppendByte('\n')
 	}
-	// Flush buffer to output
-	_, err := l.out.Write(l.buf.Buffer)
-	return err
+
+	lineBytes := make([]byte, len(buf.Buffer))
+	copy(lineBytes, buf.Buffer)
+	return lineBytes
 }
 
 // Fatal print fatal message to output and quit the application with status 1
 func (l *Logger) Fatal(v ...interface{}) {
 	if atomic.LoadInt32(&l.logLevel) <= 4 {
-		l.Output(1, FatalPrefix, fmt.Sprintln(v...))
+		// drain pending lines first, then write the fatal one synchronously so
+		// it cannot be dropped by a full queue
+		l.Flush()
+		l.outputSync(1, FatalPrefix, fmt.Sprintln(v...))
 	}
 	os.Exit(1)
 }
@@ -306,7 +397,8 @@ func (l *Logger) Fatal(v ...interface{}) {
 // with status 1
 func (l *Logger) Fatalf(format string, v ...interface{}) {
 	if atomic.LoadInt32(&l.logLevel) <= 4 {
-		l.Output(1, FatalPrefix, fmt.Sprintf(format, v...))
+		l.Flush()
+		l.outputSync(1, FatalPrefix, fmt.Sprintf(format, v...))
 	}
 	os.Exit(1)
 }
@@ -314,14 +406,14 @@ func (l *Logger) Fatalf(format string, v ...interface{}) {
 // Error print error message to output
 func (l *Logger) Error(v ...interface{}) {
 	if atomic.LoadInt32(&l.logLevel) <= 3 {
-		l.Output(1, ErrorPrefix, fmt.Sprintln(v...))
+		l.output(1, ErrorPrefix, fmt.Sprintln(v...), true)
 	}
 }
 
 // Errorf print formatted error message to output
 func (l *Logger) Errorf(format string, v ...interface{}) {
 	if atomic.LoadInt32(&l.logLevel) <= 3 {
-		l.Output(1, ErrorPrefix, fmt.Sprintf(format, v...))
+		l.output(1, ErrorPrefix, fmt.Sprintf(format, v...), true)
 	}
 }
 

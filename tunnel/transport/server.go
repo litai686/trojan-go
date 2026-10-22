@@ -41,13 +41,13 @@ func (s *Server) acceptLoop() {
 	for {
 		tcpConn, err := s.tcpListener.Accept()
 		if err != nil {
-			select {
-			case <-s.ctx.Done():
-			default:
-				log.Error(common.NewError("transport accept error").Base(err))
-				time.Sleep(time.Millisecond * 100)
+			if s.ctx.Err() != nil {
+				return
 			}
-			return
+			// a transient accept error must not kill the listener for good
+			log.Error(common.NewError("transport accept error").Base(err))
+			time.Sleep(time.Millisecond * 100)
+			continue
 		}
 
 		go func(tcpConn net.Conn) {

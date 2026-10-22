@@ -2,6 +2,7 @@ package mux
 
 import (
 	"context"
+	"time"
 
 	"github.com/xtaci/smux"
 
@@ -23,11 +24,10 @@ func (s *Server) acceptConnWorker() {
 		conn, err := s.underlay.AcceptConn(&Tunnel{})
 		if err != nil {
 			log.Debug(err)
-			select {
-			case <-s.ctx.Done():
+			if s.ctx.Err() != nil {
 				return
-			default:
 			}
+			time.Sleep(time.Millisecond * 100)
 			continue
 		}
 		go func(conn tunnel.Conn) {

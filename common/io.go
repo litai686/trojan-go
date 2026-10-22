@@ -1,12 +1,17 @@
 package common
 
 import (
+	"errors"
 	"io"
 	"net"
 	"sync"
 
 	"github.com/p4gefau1t/trojan-go/log"
 )
+
+// ErrCloseWriteNotSupported is returned when the underlying connection does
+// not support half close
+var ErrCloseWriteNotSupported = errors.New("close write not supported")
 
 type RewindReader struct {
 	mu         sync.Mutex
@@ -108,6 +113,14 @@ type RewindConn struct {
 
 func (c *RewindConn) Read(p []byte) (int, error) {
 	return c.RewindReader.Read(p)
+}
+
+// CloseWrite propagates the half close to the underlying connection
+func (c *RewindConn) CloseWrite() error {
+	if cw, ok := c.Conn.(interface{ CloseWrite() error }); ok {
+		return cw.CloseWrite()
+	}
+	return ErrCloseWriteNotSupported
 }
 
 func NewRewindConn(conn net.Conn) *RewindConn {

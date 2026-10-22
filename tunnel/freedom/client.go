@@ -3,6 +3,7 @@ package freedom
 import (
 	"context"
 	"net"
+	"time"
 
 	"github.com/txthinking/socks5"
 	"golang.org/x/net/proxy"
@@ -50,7 +51,12 @@ func (c *Client) DialConn(addr *tunnel.Address, _ tunnel.Tunnel) (tunnel.Conn, e
 	if c.preferIPv4 {
 		network = "tcp4"
 	}
-	dialer := new(net.Dialer)
+	dialer := &net.Dialer{
+		Timeout: time.Second * 10,
+	}
+	if c.keepAlive {
+		dialer.KeepAlive = time.Second * 30
+	}
 	tcpConn, err := dialer.DialContext(c.ctx, network, addr.String())
 	if err != nil {
 		return nil, common.NewError("freedom failed to dial " + addr.String()).Base(err)

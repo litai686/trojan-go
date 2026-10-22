@@ -7,6 +7,7 @@ import (
 	"net"
 	"os"
 	"strings"
+	"time"
 
 	"github.com/p4gefau1t/trojan-go/common"
 	"github.com/p4gefau1t/trojan-go/config"
@@ -18,6 +19,9 @@ const Name = "PROXY"
 
 const (
 	MaxPacketSize = 1024 * 8
+	// relayDrainTimeout bounds how long a half-closed connection may keep
+	// the opposite direction alive, so pending response data is not dropped
+	relayDrainTimeout = time.Second * 30
 )
 
 // Proxy relay connections and packets
@@ -57,6 +61,7 @@ func (p *Proxy) relayConnLoop() {
 					default:
 					}
 					log.Error(common.NewError("failed to accept connection").Base(err))
+					time.Sleep(time.Millisecond * 100)
 					continue
 				}
 				go func(inbound tunnel.Conn) {
@@ -67,21 +72,51 @@ func (p *Proxy) relayConnLoop() {
 						return
 					}
 					defer outbound.Close()
-					errChan := make(chan error, 2)
-					copyConn := func(a, b net.Conn) {
-						_, err := io.Copy(a, b)
-						errChan <- err
+
+					type relayResult struct {
+						err        error
+						halfClosed bool
 					}
-					go copyConn(inbound, outbound)
-					go copyConn(outbound, inbound)
-					select {
-					case err = <-errChan:
-						if err != nil {
-							log.Error(err)
+					resultChan := make(chan relayResult, 2)
+					relay := func(dst, src net.Conn) {
+						_, err := io.Copy(dst, src)
+						halfClosed := false
+						if err == nil {
+							// propagate EOF so the peer knows the request is complete
+							// and can finish its response
+							if cw, ok := dst.(interface{ CloseWrite() error }); ok {
+								halfClosed = cw.CloseWrite() == nil
+							}
 						}
+						resultChan <- relayResult{err: err, halfClosed: halfClosed}
+					}
+					go relay(outbound, inbound)
+					go relay(inbound, outbound)
+
+					var result relayResult
+					select {
+					case result = <-resultChan:
 					case <-p.ctx.Done():
 						log.Debug("shutting down conn relay")
 						return
+					}
+					if result.err != nil {
+						log.Debug(result.err)
+					} else {
+						if !result.halfClosed {
+							// some protocols (mux, websocket) cannot deliver the half
+							// close, but the peer may still answer on its own
+							log.Debug("half close is not supported by this protocol")
+						}
+						// the request side finished cleanly, wait for the opposite one
+						// so a pending response is not dropped
+						select {
+						case <-resultChan:
+						case <-time.After(relayDrainTimeout):
+						case <-p.ctx.Done():
+							log.Debug("shutting down conn relay")
+							return
+						}
 					}
 					log.Debug("conn relay ends")
 				}(inbound)
@@ -103,6 +138,7 @@ func (p *Proxy) relayPacketLoop() {
 					default:
 					}
 					log.Error(common.NewError("failed to accept packet").Base(err))
+					time.Sleep(time.Millisecond * 100)
 					continue
 				}
 				go func(inbound tunnel.PacketConn) {

@@ -4,6 +4,7 @@ import (
 	"context"
 	"io"
 	"net"
+	"time"
 
 	"github.com/p4gefau1t/trojan-go/common"
 	"github.com/p4gefau1t/trojan-go/log"
@@ -30,13 +31,12 @@ func (c *PacketConn) packetLoop() {
 			buf := make([]byte, MaxPacketSize)
 			n, addr, err := c.proxy.ReadWithMetadata(buf)
 			if err != nil {
-				select {
-				case <-c.ctx.Done():
+				if c.ctx.Err() != nil {
 					return
-				default:
-					log.Error("router packetConn error", err)
-					continue
 				}
+				log.Error("router packetConn error", err)
+				time.Sleep(time.Millisecond * 100)
+				continue
 			}
 			c.packetChan <- &packetInfo{
 				src:     addr,
@@ -48,13 +48,12 @@ func (c *PacketConn) packetLoop() {
 		buf := make([]byte, MaxPacketSize)
 		n, addr, err := c.PacketConn.ReadFrom(buf)
 		if err != nil {
-			select {
-			case <-c.ctx.Done():
+			if c.ctx.Err() != nil {
 				return
-			default:
-				log.Error("router packetConn error", err)
-				continue
 			}
+			log.Error("router packetConn error", err)
+			time.Sleep(time.Millisecond * 100)
+			continue
 		}
 		address, _ := tunnel.NewAddressFromAddr("udp", addr.String())
 		c.packetChan <- &packetInfo{

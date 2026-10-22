@@ -17,6 +17,14 @@ func (c *Conn) Metadata() *tunnel.Metadata {
 	return c.metadata
 }
 
+// CloseWrite propagates the half close to the underlying connection
+func (c *Conn) CloseWrite() error {
+	if cw, ok := c.Conn.(interface{ CloseWrite() error }); ok {
+		return cw.CloseWrite()
+	}
+	return common.ErrCloseWriteNotSupported
+}
+
 type packetInfo struct {
 	metadata *tunnel.Metadata
 	payload  []byte
@@ -26,6 +34,7 @@ type PacketConn struct {
 	net.PacketConn
 	input  chan *packetInfo
 	output chan *packetInfo
+	touch  chan struct{}
 	src    net.Addr
 	ctx    context.Context
 	cancel context.CancelFunc
@@ -59,6 +68,11 @@ func (c *PacketConn) WriteWithMetadata(p []byte, m *tunnel.Metadata) (int, error
 func (c *PacketConn) ReadWithMetadata(p []byte) (int, *tunnel.Metadata, error) {
 	select {
 	case info := <-c.input:
+		// keep the session alive while packets keep flowing in
+		select {
+		case c.touch <- struct{}{}:
+		default:
+		}
 		n := copy(p, info.payload)
 		return n, info.metadata, nil
 	case <-c.ctx.Done():

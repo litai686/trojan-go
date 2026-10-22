@@ -1,0 +1,74 @@
+# trojan-go 服务端推荐配置（长期对外服务用）
+#
+# 与 example/server.yaml（最小示例）的区别：
+#   - 使用 443 端口，流量特征与普通 HTTPS 站点一致
+#   - 开启 TLS 会话复用与证书热重载
+#   - 阻止客户端访问服务器内网，避免密码泄露后被当作跳板
+#
+# 使用前必须替换：password、域名、证书路径、日志路径。
+# 启动命令示例：trojan-go -config /etc/trojan-go/server.yaml
+
+run-type: server
+
+# 监听地址；需要 IPv6 时改为 "::"（同时接受 IPv4）
+local-addr: 0.0.0.0
+# 443 最不惹眼；若已被 nginx 占用，改成 8443，并同步修改客户端 remote-port
+local-port: 443
+
+# 兜底站点：所有非 trojan 流量（扫描、直接访问、格式错误的请求）都会转发到这里。
+# 推荐本机 nginx 监听 80，站点内容与 dl.halome.cc 保持一致。
+# 注意：本机 80 端口没有 HTTP 服务时，必须改回公网地址（如 www.halome.cc / 80），
+#       否则 trojan-go 启动自检（会尝试连接该地址）失败并退出。
+remote-addr: www.halome.cc
+remote-port: 80
+
+# 认证密码，客户端必须完全一致。
+# 建议 32 位以上随机字符串：openssl rand -base64 32
+# 下面的 CHANGE_ME 只是占位符，必须替换后才能启动
+password:
+  - "CHANGE_ME"
+
+# 0=all 1=info 2=warn 3=error 4=fatal 5=off
+log-level: 2
+# 留空输出到 stdout；写入文件前请确保目录存在，并自行配置 logrotate
+# log-file: 
+
+ssl:
+  # 证书与私钥的绝对路径（systemd 下相对路径容易找不到）
+  cert: /etc/trojan-go/dl.halome.cc.crt
+  key: /etc/trojan-go/dl.halome.cc.key
+  # 只接受该 SNI 的握手，被主动探测时不会暴露 trojan
+  sni: dl.halome.cc
+  verify-hostname: true
+  # 会话复用：重复连接省去一次完整握手
+  reuse-session: true
+  # 证书文件变化后自动重载（单位：秒），配合 acme.sh / certbot 续期
+  cert-check-rate: 3600
+  alpn:
+    - http/1.1
+  # 直接访问站点的 HTTPS 请求会在 TLS 层被识别并转发到这里，立即返回兜底页面；
+  # 不配置时 TLS 层会跳过 HTTP 嗅探（更省 CPU），但短请求需等 trojan 认证超时后才回退。
+  # 留空 fallback-addr 时默认使用 remote-addr
+  fallback-addr: www.halome.cc
+  fallback-port: 80
+
+# 出站访问控制：即使密码泄露，也不能把服务器当作访问内网/云元数据的跳板
+router:
+  enabled: true
+  # 先把域名解析成 IP 再匹配，否则纯域名请求可以绕过下面的规则
+  domain-strategy: ip_if_non_match
+  block:
+    - "cidr:10.0.0.0/8"
+    - "cidr:100.64.0.0/10"
+    - "cidr:127.0.0.0/8"
+    - "cidr:169.254.0.0/16"
+    - "cidr:172.16.0.0/12"
+    - "cidr:192.168.0.0/16"
+    - "cidr:::1/128"
+    - "cidr:fc00::/7"
+    - "cidr:fe80::/10"
+
+#mux:
+#  enabled: true
+#  concurrency: 8      # 8~16 比较合适；太小会频繁新建连接，太大则单连接拥塞更难恢复
+#  idle-timeout: 30

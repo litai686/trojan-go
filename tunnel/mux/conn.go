@@ -3,6 +3,7 @@ package mux
 import (
 	"io"
 	"math/rand"
+	"time"
 
 	"github.com/p4gefau1t/trojan-go/log"
 	"github.com/p4gefau1t/trojan-go/tunnel"
@@ -42,6 +43,8 @@ func (c *stickyConn) Close() error {
 	const maxPaddingLength = 512
 	padding := [maxPaddingLength + 8]byte{'A', 'B', 'C', 'D', 'E', 'F'} // for debugging
 	buf := c.stickToPayload(nil)
+	// never block indefinitely while tearing down a broken session
+	c.Conn.SetWriteDeadline(time.Now().Add(time.Second))
 	c.Write(append(buf, padding[:rand.Intn(maxPaddingLength)]...))
 	return c.Conn.Close()
 }
