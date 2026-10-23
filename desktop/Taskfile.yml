@@ -3,7 +3,7 @@ version: '3'
 vars:
   APP_NAME: "trojan-go-desktop"
   BIN_DIR: "bin"
-  VERSION: '{{.VERSION | default "0.1.0"}}'
+  VERSION: '{{.VERSION | default "0.0.1"}}'
   GOOS: '{{.GOOS | default OS}}'
 
 includes:

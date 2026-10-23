@@ -50,8 +50,8 @@
 | 子进程 | `os/exec` + `trojan-go -config <file>` | 标准输出/错误接入日志管道 |
 | 自动更新 | Wails `app.Updater` + 自定义 GitHub Provider | 内置下载、校验、原子替换、重启 |
 | Windows 安装包 | NSIS（Wails 内置打包流程） | 安装目录包含 `trojan-go.exe` |
-| macOS 安装包 | `.app`（Wails 打包） | `Contents/MacOS/trojan-go` |
-| Linux 安装包 | `tar.gz`（当前实现，可扩展 AppImage/deb/rpm） | 二进制放入应用目录 |
+| macOS 安装包 | `.app`（zip 分发，Wails 打包） | `Contents/MacOS/trojan-go` |
+| Linux 安装包 | AppImage（Wails 打包） | AppDir 的 `usr/bin` 内含 `trojan-go` |
 
 > 注意：Wails v3 仍处于 beta，升级 SDK 时必须同步验证：
 > `application.Options`、`Service` 绑定、`app.Updater`、`build/windows/nsis/project.nsi` 模板。
@@ -421,7 +421,7 @@ stopped --Activate--> starting --成功--> running
 package main
 
 var (
-    version   = "dev"
+    version   string
     commit    = "none"
     buildTime = "unknown"
 )
@@ -453,8 +453,9 @@ type VersionInfo struct {
 }
 ```
 
-> 发布前同步 `build/config.yml`、`build/windows/info.json`、`build/darwin/Info*.plist`
-> 中的版本号；`-ldflags` 只影响程序内显示的版本，不会自动更新安装包元数据。
+> 版本号统一维护在 `desktop/Taskfile.yml` 的 `VERSION`；构建前 `scripts/sync-version`
+> 会把版本号同步到 `build/config.yml`、`build/windows/info.json`、
+> `build/windows/nsis/wails_tools.nsh`、`build/darwin/Info*.plist`，无需手动修改。
 
 ---
 
@@ -698,8 +699,8 @@ const state = await Call.ByName("main.RuntimeService.GetState");
 | --- | --- | --- |
 | Windows amd64 | `trojan-go-desktop-windows-amd64-installer.exe` | `trojan-go-desktop-windows-amd64.exe` |
 | Windows arm64 | 同上（arm64） | 同上（arm64） |
-| macOS amd64/arm64 | `trojan-go-desktop-darwin-<arch>.app.zip` | 同左（zip 内单个 .app） |
-| Linux amd64/arm64 | `trojan-go-desktop-linux-<arch>.tar.gz`（当前实现，内含主程序与 trojan-go） | 同左；后续可扩展 AppImage / deb / rpm |
+| macOS amd64/arm64 | `.app`（zip 分发） | `trojan-go-desktop-darwin-<arch>.zip`（zip 内单个 .app） |
+| Linux amd64/arm64 | `trojan-go-desktop-linux-<arch>.AppImage`（内含主程序与 trojan-go） | 同左 |
 
 `SHA256SUMS-desktop.txt` 与资产一起发布，格式：
 
@@ -743,13 +744,14 @@ RequestExecutionLevel user
 
 - `wails3 package` 生成 `.app`。
 - 打包后把 `trojan-go` 复制到 `Trojan-Go Desktop.app/Contents/MacOS/trojan-go` 并 `chmod +x`。
-- 更新资产为 `.app` 的 zip（zip 内仅一个顶层 `.app`，符合 Wails updater 解包规则）。
+- 发布与更新共用 `.app` 的 zip（zip 内仅一个顶层 `.app`，符合 Wails updater 解包规则）。
 - 未签名时需在文档中说明 Gatekeeper 绕过方式；正式发布需 Developer ID + 公证。
 
 ### 10.5 Linux
 
-- 当前 Taskfile 产出便携 `tar.gz`，解压后包含 `trojan-go-desktop` 与 `trojan-go`。
-- 后续可基于 Wails 模板扩展 AppImage / deb / rpm；扩展时需确保 `trojan-go` 也被放入安装目录（例如 AppDir 的 `usr/bin` 或 nfpm 的 extra files）。
+- `wails3 package` 产出 AppImage，AppDir 的 `usr/bin` 同时包含 `trojan-go-desktop` 与 `trojan-go`。
+- `wails3 generate appimage` 会重建 AppDir；Taskfile 在生成后把 `trojan-go` 放入 AppDir 并重新打包。
+- 安装与自动更新共用同一个 AppImage；文件名必须含 `linux` 与 `amd64`/`arm64`，`pickAsset` 才能匹配。
 - GTK4/WebKitGTK 6.0 依赖按 Wails 文档声明。
 
 ### 10.6 Taskfile 任务（建议）

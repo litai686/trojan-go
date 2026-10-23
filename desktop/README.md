@@ -28,8 +28,8 @@ desktop/
 ├── internal/update                       # GitHub Release Provider
 ├── frontend                              # 原生前端（内嵌）
 ├── build                                 # Wails 打包资源（NSIS/.app/图标）
-├── scripts/stage-trojan.go               # 打包前复制 trojan-go
-└── Taskfile.yml
+├── scripts                               # 打包辅助（同步版本号、复制 trojan-go）
+└── Taskfile.yml                          # 版本号唯一来源（vars.VERSION）
 ```
 
 ## 环境要求
@@ -109,14 +109,14 @@ macOS：
 
 ```bash
 wails3 package GOOS=darwin
-# .app 内包含 Contents/MacOS/trojan-go
+# 产物：bin/trojan-go-desktop.app（内含 Contents/MacOS/trojan-go）
 ```
 
 Linux：
 
 ```bash
 wails3 package GOOS=linux
-# bin/trojan-go-desktop-linux-<arch>.tar.gz，内含主程序与 trojan-go
+# 产物：bin/trojan-go-desktop-linux-<arch>.AppImage（内含主程序与 trojan-go）
 ```
 
 打包前 `scripts/stage-trojan.go` 会检查并复制 `../build/<goos>-<goarch>/trojan-go[.exe]`；
@@ -129,17 +129,21 @@ wails3 package GOOS=linux
 - Release 资产：
   - `trojan-go-desktop-windows-amd64.exe`（便携单文件，用于原子替换）
   - `trojan-go-desktop-windows-amd64-installer.exe`
-  - `trojan-go-desktop-darwin-<arch>.zip`（zip 内仅一个 `.app`）
-  - `trojan-go-desktop-linux-<arch>.AppImage` 或 `.tar.gz`
+  - `trojan-go-desktop-darwin-<arch>.zip`（zip 内仅一个 `.app`，安装与自动更新共用）
+  - `trojan-go-desktop-linux-<arch>.AppImage`（安装与自动更新共用）
   - `SHA256SUMS-desktop.txt`（必须提供，缺失时客户端拒绝更新）
 - 更新由 Wails `app.Updater` 完成下载、校验、暂存与重启；自定义 Provider 会过滤 `desktop-v*` tag。
 
 ## 版本注入
 
+版本号只在 `Taskfile.yml` 的 `vars.VERSION` 中维护，发布时改这一处即可；
+临时构建也可以用命令行覆盖：
+
 ```bash
-wails3 build VERSION=0.1.0
+wails3 build VERSION=0.2.0
 ```
 
-Taskfile 会注入 `main.version`、`main.commit`、`main.buildTime`。
-发布前还需同步 `build/config.yml`、`build/windows/info.json`、`build/darwin/Info*.plist`
-中的版本号，保证安装包与 macOS Bundle 元数据一致。
+Taskfile 会注入 `main.version`、`main.commit`、`main.buildTime`，并在构建前运行
+`scripts/sync-version`，把版本号写入 `build/config.yml`、`build/windows/info.json`、
+`build/windows/nsis/wails_tools.nsh`、`build/darwin/Info*.plist`，安装包与 macOS
+Bundle 元数据无需手动同步。

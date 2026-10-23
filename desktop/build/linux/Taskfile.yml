@@ -4,10 +4,11 @@ includes:
   common: ../Taskfile.yml
 
 vars:
-  VERSION: '{{.VERSION | default "0.1.0"}}'
   COMMIT:
     sh: git rev-parse --short HEAD
   BUILD_TIME: '{{now | date "2006-01-02T15:04:05Z07:00"}}'
+  APPIMAGE_ARCH: '{{if eq (.ARCH | default ARCH) "arm64"}}aarch64{{else}}x86_64{{end}}'
+  APPIMAGE_NAME: '{{.APP_NAME}}-linux-{{.ARCH | default ARCH}}.AppImage'
 
 tasks:
   build:
@@ -29,13 +30,39 @@ tasks:
       GOARCH: '{{.ARCH | default ARCH}}'
 
   package:
-    summary: Creates a portable tar.gz containing the app and trojan-go
+    summary: Creates the AppImage used for installation and auto-update
     deps:
       - task: build
     cmds:
-      - mkdir -p "{{.BIN_DIR}}/{{.APP_NAME}}-linux-{{.ARCH | default ARCH}}"
-      - cp "{{.BIN_DIR}}/{{.APP_NAME}}" "{{.BIN_DIR}}/trojan-go" "{{.BIN_DIR}}/{{.APP_NAME}}-linux-{{.ARCH | default ARCH}}/"
-      - tar -czf "{{.BIN_DIR}}/{{.APP_NAME}}-linux-{{.ARCH | default ARCH}}.tar.gz" -C "{{.BIN_DIR}}" "{{.APP_NAME}}-linux-{{.ARCH | default ARCH}}"
+      - task: create:appimage
+
+  create:appimage:
+    summary: Builds an AppImage containing the app and trojan-go
+    deps:
+      - task: generate:dotdesktop
+    cmds:
+      - mkdir -p build/linux/appimage/out
+      - wails3 generate appimage -binary "{{.BIN_DIR}}/{{.APP_NAME}}" -icon build/appicon.png -desktopfile build/linux/{{.APP_NAME}}.desktop -outputdir build/linux/appimage/out -builddir build/linux/appimage/build
+      - task: repack:appimage
+
+  repack:appimage:
+    summary: Adds trojan-go to the AppDir and repacks the AppImage
+    internal: true
+    dir: build/linux/appimage/build
+    env:
+      OUTPUT: '{{.APPIMAGE_NAME}}'
+    cmds:
+      - cp "{{.ROOT_DIR}}/{{.BIN_DIR}}/trojan-go" "{{.APP_NAME}}-{{.APPIMAGE_ARCH}}.AppDir/usr/bin/trojan-go"
+      - chmod +x "{{.APP_NAME}}-{{.APPIMAGE_ARCH}}.AppDir/usr/bin/trojan-go"
+      - ./linuxdeploy-{{.APPIMAGE_ARCH}}.AppImage --appimage-extract-and-run --appdir "{{.APP_NAME}}-{{.APPIMAGE_ARCH}}.AppDir" --output appimage
+      - mv "{{.APPIMAGE_NAME}}" "{{.ROOT_DIR}}/{{.BIN_DIR}}/"
+
+  generate:dotdesktop:
+    summary: Generates the .desktop file used by the AppImage
+    dir: build
+    cmds:
+      - mkdir -p linux
+      - wails3 generate .desktop -name "{{.APP_NAME}}" -exec "{{.APP_NAME}}" -icon "appicon" -outputfile "linux/{{.APP_NAME}}.desktop" -categories "Network;"
 
   run:
     env:

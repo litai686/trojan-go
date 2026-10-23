@@ -8,6 +8,15 @@ tasks:
     cmds:
       - go mod tidy
 
+  sync:version:
+    summary: Writes VERSION into config.yml and platform package metadata
+    internal: true
+    preconditions:
+      - sh: 'test -n "{{.VERSION}}"'
+        msg: "VERSION 为空，请在 desktop/Taskfile.yml 中设置"
+    cmds:
+      - go run ./scripts/sync-version -version "{{.VERSION}}"
+
   generate:icons:
     summary: Generates Windows .ico and macOS .icns from build/appicon.png
     dir: build

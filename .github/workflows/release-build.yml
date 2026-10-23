@@ -148,13 +148,22 @@ jobs:
           mkdir -p dist
           ditto -c -k --norsrc --noextattr --keepParent "bin/trojan-go-desktop.app" "dist/trojan-go-desktop-${{ matrix.name }}.zip"
 
+      - name: Verify AppImage
+        if: matrix.goos == 'linux'
+        shell: bash
+        working-directory: desktop
+        run: |
+          chmod +x "bin/trojan-go-desktop-${{ matrix.name }}.AppImage"
+          "bin/trojan-go-desktop-${{ matrix.name }}.AppImage" --appimage-extract >/dev/null
+          test -x squashfs-root/usr/bin/trojan-go
+
       - name: Collect Linux assets
         if: matrix.goos == 'linux'
         shell: bash
         working-directory: desktop
         run: |
           mkdir -p dist
-          cp "bin/trojan-go-desktop-${{ matrix.name }}.tar.gz" dist/
+          cp "bin/trojan-go-desktop-${{ matrix.name }}.AppImage" dist/
 
       - name: Upload desktop artifacts
         uses: actions/upload-artifact@v4

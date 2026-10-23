@@ -1,10 +1,10 @@
 {
 	"fixed": {
-		"file_version": "0.1.0"
+		"file_version": "0.0.1"
 	},
 	"info": {
 		"0409": {
-			"ProductVersion": "0.1.0",
+			"ProductVersion": "0.0.1",
 			"CompanyName": "litai686",
 			"FileDescription": "Trojan-Go Desktop",
 			"LegalCopyright": "Copyright (c) 2026 litai686",

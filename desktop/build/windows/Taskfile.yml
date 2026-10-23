@@ -4,7 +4,6 @@ includes:
   common: ../Taskfile.yml
 
 vars:
-  VERSION: '{{.VERSION | default "0.1.0"}}'
   COMMIT:
     sh: git rev-parse --short HEAD
   BUILD_TIME: '{{now | date "2006-01-02T15:04:05Z07:00"}}'
@@ -21,6 +20,9 @@ tasks:
     summary: Builds the application using native Go compilation
     internal: true
     deps:
+      - task: common:sync:version
+        vars:
+          VERSION: '{{.VERSION}}'
       - task: common:go:mod:tidy
       - task: common:generate:icons
       - task: common:stage:trojan

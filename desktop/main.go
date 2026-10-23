@@ -123,11 +123,13 @@ func main() {
 	app.RegisterService(application.NewService(updateService))
 	app.RegisterService(application.NewService(systemService))
 
-	if err := app.Updater.Init(updater.Config{
-		CurrentVersion: version,
-		Providers:      []updater.Provider{provider},
-	}); err != nil {
-		hub.AddSystem("初始化更新模块失败: " + err.Error())
+	if version != "" {
+		if err := app.Updater.Init(updater.Config{
+			CurrentVersion: version,
+			Providers:      []updater.Provider{provider},
+		}); err != nil {
+			hub.AddSystem("初始化更新模块失败: " + err.Error())
+		}
 	}
 
 	window := app.Window.NewWithOptions(application.WebviewWindowOptions{

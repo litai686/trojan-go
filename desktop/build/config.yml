@@ -8,7 +8,7 @@ info:
   description: "Trojan-Go desktop client"
   copyright: "Copyright (c) 2026 litai686"
   comments: "Manage multiple trojan-go client profiles with live logs and in-app updates."
-  version: "0.1.0"
+  version: "0.0.1"
 
 # Dev mode: rebuild the embedded frontend and restart on Go/JS/CSS/HTML changes.
 dev_mode:

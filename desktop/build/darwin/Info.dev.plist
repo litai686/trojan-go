@@ -11,11 +11,11 @@
         <key>CFBundleIdentifier</key>
             <string>com.litai686.trojan-go-desktop</string>
         <key>CFBundleVersion</key>
-            <string>0.1.0</string>
+            <string>0.0.1</string>
         <key>CFBundleGetInfoString</key>
             <string>Trojan-Go desktop client</string>
         <key>CFBundleShortVersionString</key>
-            <string>0.1.0</string>
+            <string>0.0.1</string>
         <key>CFBundleIconFile</key>
             <string>icons</string>
         <key>LSMinimumSystemVersion</key>
