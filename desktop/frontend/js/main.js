@@ -42,7 +42,12 @@ async function autoCheckUpdate() {
   }
 }
 
+function disableContextMenu() {
+  document.addEventListener("contextmenu", (event) => event.preventDefault());
+}
+
 async function bootstrap() {
+  disableContextMenu();
   state.mock = await initApi();
 
   if (state.mock) {

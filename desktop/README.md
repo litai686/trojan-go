@@ -11,7 +11,7 @@
 - 实时显示 trojan-go 标准输出/错误输出（级别过滤、搜索、自动滚动）
 - 设置：启动时激活上次配置、启动时检查更新、日志缓冲、主题、自定义二进制路径
 - 版本信息与关于页
-- GitHub Releases 自动更新（SHA-256 校验、原子替换、重启生效）
+- GitHub Releases 自动更新（macOS/Linux，SHA-256 校验、原子替换、重启生效）
 - 关闭窗口默认隐藏到系统托盘，托盘菜单可显示主界面或退出
 - 打包时自动把 `build/<goos>-<goarch>/trojan-go[.exe]` 放到安装目录
 
@@ -38,7 +38,7 @@ desktop/
 - Wails CLI：`go install github.com/wailsapp/wails/v3/cmd/wails3@v3.0.0-beta.34`
 - Windows：WebView2 Runtime；打包 NSIS 需要安装 [NSIS](https://nsis.sourceforge.io/)（`makensis` 在 PATH）
 - macOS：Xcode Command Line Tools
-- Linux：GTK4 / WebKitGTK 6.0、gcc
+- Linux：GTK4（>= 4.10）/ WebKitGTK 6.0、gcc（Ubuntu 24.04+；22.04 的 GTK 4.6 版本过低）
 
 ## 开发
 
@@ -90,19 +90,35 @@ go test ./...
 
 ## 打包
 
+也可以在仓库根目录直接运行一键脚本，它会先编译本机 trojan-go，再调用 `wails3 package` 并只把
+完整安装包收集到 `build/desktop/`（Windows NSIS 安装包内含 `trojan-go.exe`；macOS 为 `.app.zip`；
+Linux 为 AppImage）：
+
+```bash
+./build.sh                      # 编译本机 trojan-go 并打包桌面客户端
+./build.sh --no-desktop         # 只编译 trojan-go
+./build.sh --desktop-version 0.2.0  # 指定桌面客户端版本
+```
+
+Windows 的 cmd / PowerShell 中可直接运行 `build.cmd`（自动查找 Git Bash），参数相同：
+
+```bat
+build.cmd
+build.cmd --target windows-amd64
+```
+
+> Windows 只生成 NSIS 安装包（自动探测 `C:\Program Files (x86)\NSIS`）；未安装 NSIS 会直接报错，
+> 可用 `--no-desktop` 只编译 trojan-go。
+> 用 `--target` 只编译其它平台时会自动跳过桌面打包，`--desktop` 可强制追加本机目标。
+
+手动打包：
+
 Windows（默认用户目录安装，更新无需管理员权限）：
 
 ```bash
 cd desktop
 wails3 package
-# 产物：bin/trojan-go-desktop-windows-amd64-installer.exe
-#       bin/trojan-go-desktop.exe + bin/trojan-go.exe（便携）
-```
-
-便携 zip：
-
-```bash
-wails3 task windows:package:portable
+# 产物：bin/trojan-go-desktop-windows-amd64-installer.exe（内含 trojan-go.exe）
 ```
 
 macOS：
@@ -126,13 +142,13 @@ wails3 package GOOS=linux
 
 - 更新请求会智能选路：当前配置正在运行且本地端口可连接时，通过 trojan-go 的本地 SOCKS5 代理访问 GitHub；否则直连。代理请求失败会自动回退直连。
 - 桌面端 Release tag 使用 `desktop-v<semver>`（例如 `desktop-v0.1.0`），与 trojan-go 的 `v0.10.x` 区分。
-- Release 资产：
-  - `trojan-go-desktop-windows-amd64.exe`（便携单文件，用于原子替换）
-  - `trojan-go-desktop-windows-amd64-installer.exe`
+- Release 资产（均为完整安装包，内含 trojan-go）：
+  - `trojan-go-desktop-windows-amd64-installer.exe`（NSIS，内含 `trojan-go.exe`）
   - `trojan-go-desktop-darwin-<arch>.zip`（zip 内仅一个 `.app`，安装与自动更新共用）
   - `trojan-go-desktop-linux-<arch>.AppImage`（安装与自动更新共用）
   - `SHA256SUMS-desktop.txt`（必须提供，缺失时客户端拒绝更新）
 - 更新由 Wails `app.Updater` 完成下载、校验、暂存与重启；自定义 Provider 会过滤 `desktop-v*` tag。
+- Windows 不再发布便携单文件，内置更新只适用于 macOS/Linux；Windows 需重新运行安装包升级。
 
 ## 版本注入
 

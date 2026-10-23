@@ -13,6 +13,8 @@ weight: 10
 sudo ./build.sh --install #安装可执行文件到 /usr/local/bin，可选
 ```
 
+脚本默认会同时打包本机平台的桌面客户端（需要 wails3，且编译目标中包含本机平台），产物在 `build/desktop/`；只需要 trojan-go 时加 `--no-desktop`。
+
 或者直接使用Go进行编译：
 
 ```shell

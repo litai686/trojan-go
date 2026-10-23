@@ -274,13 +274,20 @@ Trojan-Go 支持可插拔的传输层插件，并支持 Shadowsocks [SIP003](htt
 
 > 请确保 Go 版本 >= 1.14
 
-使用 `build.sh` 进行编译：
+使用 `build.sh` 进行编译（默认同时打包本机桌面客户端；`--no-desktop` 可只编译 trojan-go）：
 
 ```shell
 git clone https://github.com/p4gefau1t/trojan-go.git
 cd trojan-go
 ./build.sh
 sudo ./build.sh --install #安装可执行文件到 /usr/local/bin，可选
+```
+
+Windows 没有 bash 时，可在 cmd / PowerShell 中直接运行 `build.cmd`（会自动调用 Git Bash）：
+
+```bat
+build.cmd
+build.cmd --target windows-amd64
 ```
 
 或者使用 Go 自行编译：

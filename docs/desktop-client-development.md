@@ -695,23 +695,25 @@ const state = await Call.ByName("main.RuntimeService.GetState");
 
 ### 10.1 产物命名
 
-| 平台 | 安装包 | 便携/更新资产 |
-| --- | --- | --- |
-| Windows amd64 | `trojan-go-desktop-windows-amd64-installer.exe` | `trojan-go-desktop-windows-amd64.exe` |
-| Windows arm64 | 同上（arm64） | 同上（arm64） |
-| macOS amd64/arm64 | `.app`（zip 分发） | `trojan-go-desktop-darwin-<arch>.zip`（zip 内单个 .app） |
-| Linux amd64/arm64 | `trojan-go-desktop-linux-<arch>.AppImage`（内含主程序与 trojan-go） | 同左 |
+| 平台 | 发布安装包 |
+| --- | --- |
+| Windows amd64/arm64 | `trojan-go-desktop-windows-<arch>-installer.exe`（NSIS，内含 `trojan-go.exe`） |
+| macOS amd64/arm64 | `trojan-go-desktop-darwin-<arch>.zip`（zip 内单个 `.app`，内含 `Contents/MacOS/trojan-go`） |
+| Linux amd64/arm64 | `trojan-go-desktop-linux-<arch>.AppImage`（内含主程序与 trojan-go） |
 
 `SHA256SUMS-desktop.txt` 与资产一起发布，格式：
 
 ```text
-<sha256>  trojan-go-desktop-windows-amd64.exe
 <sha256>  trojan-go-desktop-windows-amd64-installer.exe
+<sha256>  trojan-go-desktop-darwin-arm64.zip
+<sha256>  trojan-go-desktop-linux-amd64.AppImage
 ```
 
 ### 10.2 trojan-go 二进制来源
 
 - 根目录 `build/<goos>-<goarch>/trojan-go[.exe]`（由根仓库 `build.sh` 生成）。
+- 根目录 `./build.sh` 默认会在编译本机 trojan-go 后继续调用 `wails3 package`，并把产物收集到
+  `build/desktop/`；`--no-desktop` 可跳过，`--desktop-version` 可指定桌面客户端版本。
 - 桌面端打包前由 `scripts/stage-trojan` 复制到 `desktop/build/<platform>/trojan-go[.exe]`。
 - 若源文件不存在，打包任务直接失败并提示先构建 trojan-go。
 - 开发/测试可设置 `TROJAN_GO_BINARY` 指向任意二进制。
@@ -782,10 +784,10 @@ tasks:
 - 桌面端版本使用 SemVer，例如 `0.1.0`。
 - Release tag 使用 `desktop-v0.1.0`，避免与 trojan-go 的 `v0.10.x` 混淆。
 - 每次 Release 至少包含：
-  - 当前平台便携资产（用于原子替换）
-  - 安装包
+  - 完整安装包（Windows NSIS / macOS `.app.zip` / Linux AppImage，均内含 trojan-go）
   - `SHA256SUMS-desktop.txt`
   - Release Notes（Markdown）
+- Windows 不再发布便携单文件，内置的原子替换更新只适用于 macOS/Linux；Windows 通过重新运行安装包升级。
 
 ### 11.2 自定义 GitHub Provider
 

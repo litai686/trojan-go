@@ -77,13 +77,6 @@ tasks:
       ARG_FLAG: '{{if eq .ARCH "amd64"}}AMD64{{else}}ARM64{{end}}'
       INSTALL_SCOPE: '{{.INSTALL_SCOPE | default "user"}}'
 
-  package:portable:
-    summary: Creates a portable zip containing the app and trojan-go.exe
-    deps:
-      - task: build
-    cmds:
-      - powershell -NoProfile -Command "Compress-Archive -Force -Path '{{.BIN_DIR}}/{{.APP_NAME}}.exe','{{.BIN_DIR}}/trojan-go.exe' -DestinationPath '{{.BIN_DIR}}/{{.APP_NAME}}-windows-{{.ARCH | default ARCH}}.zip'"
-
   run:
     env:
       TROJAN_DESKTOP_EMBEDDED_FRONTEND: "1"

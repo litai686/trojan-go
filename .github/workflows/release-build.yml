@@ -43,7 +43,7 @@ jobs:
           cache: false
 
       - name: Build and package
-        run: bash build.sh --release --target "${TROJAN_TARGETS}"
+        run: bash build.sh --release --target "${TROJAN_TARGETS}" --no-desktop
 
       - name: Show artifacts
         run: ls -lh trojan-go-*.zip
@@ -83,7 +83,7 @@ jobs:
             goos: darwin
             goarch: amd64
           - name: linux-amd64
-            runner: ubuntu-latest
+            runner: ubuntu-24.04
             goos: linux
             goarch: amd64
     steps:
@@ -96,21 +96,24 @@ jobs:
           go-version-file: desktop/go.mod
           cache: false
 
-      - name: Install Wails CLI
-        shell: bash
-        run: |
-          go install "github.com/wailsapp/wails/v3/cmd/wails3@${WAILS_VERSION}"
-          echo "$(go env GOPATH)/bin" >> "$GITHUB_PATH"
-
       - name: Install Linux dependencies
         if: matrix.goos == 'linux'
         run: |
           sudo apt-get update
           sudo apt-get install -y build-essential pkg-config libgtk-4-dev libwebkitgtk-6.0-dev
 
+      - name: Install Wails CLI
+        shell: bash
+        run: |
+          go install "github.com/wailsapp/wails/v3/cmd/wails3@${WAILS_VERSION}"
+          echo "$(go env GOPATH)/bin" >> "$GITHUB_PATH"
+
       - name: Install NSIS
         if: matrix.goos == 'windows'
-        run: choco install nsis --no-progress -y
+        shell: pwsh
+        run: |
+          choco install nsis --no-progress -y
+          "C:\Program Files (x86)\NSIS" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
 
       - name: Download trojan-go binaries
         uses: actions/download-artifact@v4
@@ -130,15 +133,30 @@ jobs:
         working-directory: desktop
         run: wails3 package GOOS=${{ matrix.goos }} GOARCH=${{ matrix.goarch }} VERSION=${{ needs.version.outputs.value }}
 
-      - name: Collect Windows assets
+      - name: Collect Windows installer
         if: matrix.goos == 'windows'
         shell: pwsh
         working-directory: desktop
         run: |
           New-Item -ItemType Directory -Force dist | Out-Null
-          Copy-Item bin/trojan-go-desktop.exe "dist/trojan-go-desktop-${{ matrix.name }}.exe"
-          Copy-Item bin/*-installer.exe dist/
-          Compress-Archive -Force -Path bin/trojan-go-desktop.exe,bin/trojan-go.exe -DestinationPath "dist/trojan-go-desktop-${{ matrix.name }}.zip"
+          if (-not (Test-Path 'build/windows/trojan-go.exe')) { throw 'trojan-go.exe was not staged for the installer' }
+          $installers = @(Get-ChildItem bin -Filter '*-installer.exe')
+          if ($installers.Count -eq 0) { throw 'NSIS installer was not produced' }
+          Copy-Item $installers.FullName dist/
+
+      - name: Verify Windows installer contains trojan-go
+        if: matrix.goos == 'windows'
+        shell: pwsh
+        working-directory: desktop
+        run: |
+          $installer = (Get-ChildItem bin -Filter '*-installer.exe' | Select-Object -First 1).FullName
+          $target = Join-Path $env:RUNNER_TEMP 'tgd-verify'
+          Remove-Item -Recurse -Force $target -ErrorAction SilentlyContinue
+          $proc = Start-Process -FilePath $installer -ArgumentList '/S', "/D=$target" -Wait -PassThru
+          if ($proc.ExitCode -ne 0) { throw "installer exited with code $($proc.ExitCode)" }
+          if (-not (Test-Path (Join-Path $target 'trojan-go-desktop.exe'))) { throw 'trojan-go-desktop.exe missing from installer' }
+          if (-not (Test-Path (Join-Path $target 'trojan-go.exe'))) { throw 'trojan-go.exe missing from installer' }
+          & (Join-Path $target 'uninstall.exe') /S | Out-Null
 
       - name: Collect macOS assets
         if: matrix.goos == 'darwin'
@@ -146,6 +164,7 @@ jobs:
         working-directory: desktop
         run: |
           mkdir -p dist
+          test -x "bin/trojan-go-desktop.app/Contents/MacOS/trojan-go"
           ditto -c -k --norsrc --noextattr --keepParent "bin/trojan-go-desktop.app" "dist/trojan-go-desktop-${{ matrix.name }}.zip"
 
       - name: Verify AppImage

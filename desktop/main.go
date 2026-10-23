@@ -133,14 +133,15 @@ func main() {
 	}
 
 	window := app.Window.NewWithOptions(application.WebviewWindowOptions{
-		Title:               "Trojan-Go Desktop",
-		Width:               1120,
-		Height:              760,
-		MinWidth:            900,
-		MinHeight:           600,
-		MaximiseButtonState: application.ButtonDisabled,
-		BackgroundColour:    application.NewRGB(15, 18, 26),
-		URL:                 "/",
+		Title:                      "Trojan-Go Desktop",
+		Width:                      1120,
+		Height:                     760,
+		MinWidth:                   900,
+		MinHeight:                  600,
+		MaximiseButtonState:        application.ButtonDisabled,
+		DefaultContextMenuDisabled: true,
+		BackgroundColour:           application.NewRGB(15, 18, 26),
+		URL:                        "/",
 	})
 	installTray(app, window)
 

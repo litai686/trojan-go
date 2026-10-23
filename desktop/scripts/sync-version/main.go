@@ -33,11 +33,19 @@ func main() {
 		fatal(fmt.Errorf("无效的版本号 %q：请把 desktop/Taskfile.yml 中的 VERSION 写成 x.y.z", *version))
 	}
 
-	targets := []target{
+	for _, t := range targetsFor(v) {
+		if err := sync(*root, t); err != nil {
+			fatal(err)
+		}
+	}
+}
+
+func targetsFor(v string) []target {
+	return []target{
 		{
 			path: filepath.Join("build", "config.yml"),
 			edits: []replacement{
-				{regexp.MustCompile(`(?m)^(  version: ")[^"]*(")$`), v},
+				{regexp.MustCompile(`(?m)^(  version: ")[^"]*("\r?)$`), v},
 			},
 		},
 		{
@@ -61,12 +69,6 @@ func main() {
 				{regexp.MustCompile(`(?m)(!define INFO_PRODUCTVERSION\s+")[^"]*(")`), v},
 			},
 		},
-	}
-
-	for _, t := range targets {
-		if err := sync(*root, t); err != nil {
-			fatal(err)
-		}
 	}
 }
 
