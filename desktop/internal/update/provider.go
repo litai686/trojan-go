@@ -11,6 +11,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"path/filepath"
 	"strings"
 	"sync"
@@ -24,6 +25,9 @@ const (
 	apiBase = "https://api.github.com"
 	// ChecksumAsset is the release asset name holding sha256sum-style lines.
 	ChecksumAsset = "SHA256SUMS-desktop.txt"
+	// assetPrefix scopes updates to desktop artifacts: the same release also
+	// carries trojan-go server/client archives with similar names.
+	assetPrefix = "trojan-go-desktop-"
 )
 
 // Config configures the provider.
@@ -34,6 +38,10 @@ type Config struct {
 	// BaseURL overrides the GitHub API root (useful for tests and GitHub
 	// Enterprise).
 	BaseURL string
+	// ProxyURL returns a proxy URL (for example socks5://127.0.0.1:1080)
+	// when update traffic should use the running trojan-go client, or an
+	// empty string to connect directly.
+	ProxyURL func() string
 }
 
 type releaseAsset struct {
@@ -56,12 +64,16 @@ type apiRelease struct {
 
 // Provider implements updater.Provider.
 type Provider struct {
-	mu   sync.RWMutex
-	cfg  Config
-	api  *http.Client
-	dl   *http.Client
-	base string
+	mu     sync.RWMutex
+	cfg    Config
+	base   string
+	direct *http.Transport
 }
+
+const (
+	apiTimeout            = 30 * time.Second
+	responseHeaderTimeout = 30 * time.Second
+)
 
 // NewProvider creates a provider. The tag prefix defaults to "desktop-v".
 func NewProvider(cfg Config) *Provider {
@@ -72,12 +84,58 @@ func NewProvider(cfg Config) *Provider {
 	if base == "" {
 		base = apiBase
 	}
+	direct := http.DefaultTransport.(*http.Transport).Clone()
+	direct.Proxy = nil
 	return &Provider{
-		cfg:  cfg,
-		api:  &http.Client{Timeout: 30 * time.Second},
-		dl:   &http.Client{Timeout: 0},
-		base: base,
+		cfg:    cfg,
+		base:   base,
+		direct: direct,
 	}
+}
+
+// resolveProxy returns the proxy to use for a request, or nil for a direct
+// connection. Invalid or unknown proxy URLs are treated as direct too.
+func (p *Provider) resolveProxy() *url.URL {
+	p.mu.RLock()
+	resolver := p.cfg.ProxyURL
+	p.mu.RUnlock()
+	if resolver == nil {
+		return nil
+	}
+	raw := strings.TrimSpace(resolver())
+	if raw == "" {
+		return nil
+	}
+	u, err := url.Parse(raw)
+	if err != nil || u.Host == "" {
+		return nil
+	}
+	switch strings.ToLower(u.Scheme) {
+	case "http", "https", "socks5":
+		return u
+	default:
+		return nil
+	}
+}
+
+func (p *Provider) client(proxy *url.URL, timeout time.Duration) *http.Client {
+	transport := p.direct.Clone()
+	transport.ResponseHeaderTimeout = responseHeaderTimeout
+	if proxy != nil {
+		transport.Proxy = http.ProxyURL(proxy)
+	}
+	return &http.Client{Timeout: timeout, Transport: transport}
+}
+
+// doAPI performs a small request, retrying without a proxy when the proxy
+// connection failed before a response was received.
+func (p *Provider) doAPI(req *http.Request) (*http.Response, error) {
+	proxy := p.resolveProxy()
+	resp, err := p.client(proxy, apiTimeout).Do(req)
+	if err == nil || proxy == nil {
+		return resp, err
+	}
+	return p.client(nil, apiTimeout).Do(req.Clone(req.Context()))
 }
 
 // Name implements updater.Provider.
@@ -113,7 +171,7 @@ func (p *Provider) Check(ctx context.Context, req updater.CheckRequest) (*update
 	httpReq.Header.Set("Accept", "application/vnd.github+json")
 	httpReq.Header.Set("X-GitHub-Api-Version", "2022-11-28")
 
-	resp, err := p.api.Do(httpReq)
+	resp, err := p.doAPI(httpReq)
 	if err != nil {
 		return nil, fmt.Errorf("请求 GitHub 失败: %w", err)
 	}
@@ -216,7 +274,11 @@ func (p *Provider) Download(ctx context.Context, rel *updater.Release, dst io.Wr
 		return err
 	}
 	req.Header.Set("Accept", "application/octet-stream")
-	resp, err := p.dl.Do(req)
+	proxy := p.resolveProxy()
+	resp, err := p.client(proxy, 0).Do(req)
+	if err != nil && proxy != nil {
+		resp, err = p.client(nil, 0).Do(req.Clone(req.Context()))
+	}
 	if err != nil {
 		return fmt.Errorf("下载更新失败: %w", err)
 	}
@@ -267,7 +329,7 @@ func (p *Provider) loadChecksum(ctx context.Context, assets []releaseAsset, targ
 		return nil, err
 	}
 	req.Header.Set("Accept", "application/octet-stream")
-	resp, err := p.api.Do(req)
+	resp, err := p.doAPI(req)
 	if err != nil {
 		return nil, fmt.Errorf("下载校验文件失败: %w", err)
 	}
@@ -312,6 +374,9 @@ func pickAsset(assets []releaseAsset, goos, goarch string) int {
 	for i, a := range assets {
 		name := strings.ToLower(a.Name)
 		if isSidecar(name) {
+			continue
+		}
+		if !strings.HasPrefix(name, assetPrefix) {
 			continue
 		}
 		// The updater swaps a single executable/bundle; installers and OS

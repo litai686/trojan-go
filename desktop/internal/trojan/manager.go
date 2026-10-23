@@ -16,8 +16,9 @@ import (
 )
 
 const (
-	stopGracePeriod = 5 * time.Second
-	killGracePeriod = 2 * time.Second
+	stopGracePeriod   = 5 * time.Second
+	killGracePeriod   = 2 * time.Second
+	proxyProbeTimeout = 300 * time.Millisecond
 )
 
 type running struct {
@@ -57,6 +58,31 @@ func (m *Manager) State() store.RuntimeState {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 	return m.state
+}
+
+// ProxyURL returns a socks5 URL for the running profile when its local
+// listener accepts connections. It returns "" when no profile is running or
+// the listener is unreachable, so callers can connect directly instead.
+func (m *Manager) ProxyURL() string {
+	st := m.State()
+	if st.Status != "running" || st.LocalAddr == "" {
+		return ""
+	}
+	host, port, err := net.SplitHostPort(st.LocalAddr)
+	if err != nil || port == "" {
+		return ""
+	}
+	switch host {
+	case "", "0.0.0.0", "::":
+		host = "127.0.0.1"
+	}
+	addr := net.JoinHostPort(host, port)
+	conn, err := net.DialTimeout("tcp", addr, proxyProbeTimeout)
+	if err != nil {
+		return ""
+	}
+	_ = conn.Close()
+	return "socks5://" + addr
 }
 
 // IsActive reports whether profileID is the currently running profile.

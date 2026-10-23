@@ -17,6 +17,7 @@
 # Build artifacts (root only; desktop/build contains packaging assets)
 /build/
 desktop/bin/
+desktop/dist/
 desktop/.task/
 *.DS_Store
 *.zip

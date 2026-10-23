@@ -4,13 +4,33 @@ on:
   push:
     tags:
       - "v*.*.*"
+      - "desktop-v*.*.*"
 
 permissions:
   contents: write
 
+env:
+  WAILS_VERSION: v3.0.0-beta.34
+  TROJAN_TARGETS: linux-amd64,linux-arm64,darwin-amd64,darwin-arm64,windows-amd64,windows-arm64
+
 jobs:
-  build:
-    name: Build linux/windows/macos binaries
+  version:
+    name: Resolve release version
+    runs-on: ubuntu-latest
+    outputs:
+      value: ${{ steps.parse.outputs.value }}
+    steps:
+      - name: Parse tag
+        id: parse
+        shell: bash
+        run: |
+          version="${GITHUB_REF_NAME#desktop-}"
+          version="${version#v}"
+          echo "value=${version}" >> "$GITHUB_OUTPUT"
+          echo "release version: ${version}"
+
+  binaries:
+    name: Build trojan-go binaries
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
@@ -23,23 +43,154 @@ jobs:
           cache: false
 
       - name: Build and package
-        run: |
-          bash build.sh --release \
-            --target linux-amd64,linux-arm64,darwin-amd64,darwin-arm64,windows-amd64,windows-arm64
+        run: bash build.sh --release --target "${TROJAN_TARGETS}"
 
       - name: Show artifacts
         run: ls -lh trojan-go-*.zip
 
-      - name: Upload workflow artifacts
+      - name: Upload release archives
         uses: actions/upload-artifact@v4
         with:
           name: trojan-go-binaries
           path: trojan-go-*.zip
           if-no-files-found: error
 
+      - name: Upload binaries for desktop packaging
+        uses: actions/upload-artifact@v4
+        with:
+          name: trojan-go-raw
+          path: build
+          if-no-files-found: error
+
+  desktop:
+    name: Build desktop (${{ matrix.name }})
+    needs: [version, binaries]
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: windows-amd64
+            runner: windows-latest
+            goos: windows
+            goarch: amd64
+          - name: darwin-arm64
+            runner: macos-latest
+            goos: darwin
+            goarch: arm64
+          - name: darwin-amd64
+            runner: macos-26-intel
+            goos: darwin
+            goarch: amd64
+          - name: linux-amd64
+            runner: ubuntu-latest
+            goos: linux
+            goarch: amd64
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v7
+
+      - name: Install Go
+        uses: actions/setup-go@v7
+        with:
+          go-version-file: desktop/go.mod
+          cache: false
+
+      - name: Install Wails CLI
+        shell: bash
+        run: |
+          go install "github.com/wailsapp/wails/v3/cmd/wails3@${WAILS_VERSION}"
+          echo "$(go env GOPATH)/bin" >> "$GITHUB_PATH"
+
+      - name: Install Linux dependencies
+        if: matrix.goos == 'linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential pkg-config libgtk-4-dev libwebkitgtk-6.0-dev
+
+      - name: Install NSIS
+        if: matrix.goos == 'windows'
+        run: choco install nsis --no-progress -y
+
+      - name: Download trojan-go binaries
+        uses: actions/download-artifact@v4
+        with:
+          name: trojan-go-raw
+          path: build
+
+      - name: Verify trojan-go binary
+        shell: bash
+        run: |
+          ext=""
+          if [ "${{ matrix.goos }}" = "windows" ]; then ext=".exe"; fi
+          test -f "build/${{ matrix.goos }}-${{ matrix.goarch }}/trojan-go${ext}"
+
+      - name: Package desktop app
+        shell: bash
+        working-directory: desktop
+        run: wails3 package GOOS=${{ matrix.goos }} GOARCH=${{ matrix.goarch }} VERSION=${{ needs.version.outputs.value }}
+
+      - name: Collect Windows assets
+        if: matrix.goos == 'windows'
+        shell: pwsh
+        working-directory: desktop
+        run: |
+          New-Item -ItemType Directory -Force dist | Out-Null
+          Copy-Item bin/trojan-go-desktop.exe "dist/trojan-go-desktop-${{ matrix.name }}.exe"
+          Copy-Item bin/*-installer.exe dist/
+          Compress-Archive -Force -Path bin/trojan-go-desktop.exe,bin/trojan-go.exe -DestinationPath "dist/trojan-go-desktop-${{ matrix.name }}.zip"
+
+      - name: Collect macOS assets
+        if: matrix.goos == 'darwin'
+        shell: bash
+        working-directory: desktop
+        run: |
+          mkdir -p dist
+          ditto -c -k --norsrc --noextattr --keepParent "bin/trojan-go-desktop.app" "dist/trojan-go-desktop-${{ matrix.name }}.zip"
+
+      - name: Collect Linux assets
+        if: matrix.goos == 'linux'
+        shell: bash
+        working-directory: desktop
+        run: |
+          mkdir -p dist
+          cp "bin/trojan-go-desktop-${{ matrix.name }}.tar.gz" dist/
+
+      - name: Upload desktop artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: desktop-${{ matrix.name }}
+          path: desktop/dist/*
+          if-no-files-found: error
+
+  release:
+    name: Publish release
+    needs: [binaries, desktop]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download trojan-go archives
+        uses: actions/download-artifact@v4
+        with:
+          name: trojan-go-binaries
+          path: dist
+
+      - name: Download desktop clients
+        uses: actions/download-artifact@v4
+        with:
+          pattern: desktop-*
+          path: dist
+          merge-multiple: true
+
+      - name: Generate desktop checksums
+        working-directory: dist
+        run: |
+          sha256sum trojan-go-desktop-* > SHA256SUMS-desktop.txt
+          cat SHA256SUMS-desktop.txt
+
       - name: Remove stale release for this tag
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
           TAG_NAME: ${{ github.ref_name }}
         run: gh release delete "$TAG_NAME" --yes || true
 
@@ -47,7 +198,7 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           name: ${{ github.ref_name }}
-          files: trojan-go-*.zip
+          files: dist/*
           generate_release_notes: true
           draft: false
           prerelease: false

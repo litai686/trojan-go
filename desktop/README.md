@@ -124,6 +124,7 @@ wails3 package GOOS=linux
 
 ## 自动更新
 
+- 更新请求会智能选路：当前配置正在运行且本地端口可连接时，通过 trojan-go 的本地 SOCKS5 代理访问 GitHub；否则直连。代理请求失败会自动回退直连。
 - 桌面端 Release tag 使用 `desktop-v<semver>`（例如 `desktop-v0.1.0`），与 trojan-go 的 `v0.10.x` 区分。
 - Release 资产：
   - `trojan-go-desktop-windows-amd64.exe`（便携单文件，用于原子替换）

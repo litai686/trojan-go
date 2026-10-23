@@ -94,6 +94,7 @@ func main() {
 		Repository: st.GetSettings().UpdateRepository,
 		TagPrefix:  "desktop-v",
 		Prerelease: st.GetSettings().UpdateChannel == "prerelease",
+		ProxyURL:   manager.ProxyURL,
 	})
 
 	profileService := &ProfileService{store: st, manager: manager, app: app}

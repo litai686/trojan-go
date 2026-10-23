@@ -68,6 +68,94 @@ func TestPickAsset(t *testing.T) {
 	if idx := pickAsset(linux, "linux", "amd64"); idx != 1 {
 		t.Fatalf("expected AppImage at index 1, got %d", idx)
 	}
+	unified := []releaseAsset{
+		{Name: "trojan-go-darwin-arm64.zip"},
+		{Name: "trojan-go-desktop-darwin-arm64.zip"},
+	}
+	if idx := pickAsset(unified, "darwin", "arm64"); idx != 1 {
+		t.Fatalf("expected desktop zip at index 1, got %d", idx)
+	}
+	if idx := pickAsset([]releaseAsset{{Name: "trojan-go-linux-amd64.zip"}}, "linux", "amd64"); idx != -1 {
+		t.Fatalf("trojan-go archives must not be used for updates, got %d", idx)
+	}
+}
+
+func TestResolveProxy(t *testing.T) {
+	cases := []struct {
+		name     string
+		resolver func() string
+		want     string
+	}{
+		{name: "disabled"},
+		{name: "empty", resolver: func() string { return "" }},
+		{name: "socks5", resolver: func() string { return " socks5://127.0.0.1:1080 " }, want: "socks5://127.0.0.1:1080"},
+		{name: "http", resolver: func() string { return "http://127.0.0.1:8080" }, want: "http://127.0.0.1:8080"},
+		{name: "invalid", resolver: func() string { return "://bad" }},
+		{name: "unsupported", resolver: func() string { return "ftp://127.0.0.1:21" }},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			p := NewProvider(Config{ProxyURL: tc.resolver})
+			got := p.resolveProxy()
+			if tc.want == "" {
+				if got != nil {
+					t.Fatalf("expected a direct connection, got %v", got)
+				}
+				return
+			}
+			if got == nil || got.String() != tc.want {
+				t.Fatalf("resolveProxy() = %v, want %s", got, tc.want)
+			}
+		})
+	}
+}
+
+func TestAPIRequestUsesProxy(t *testing.T) {
+	hits := 0
+	proxySrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		hits++
+		_, _ = w.Write([]byte("via proxy"))
+	}))
+	defer proxySrv.Close()
+
+	p := NewProvider(Config{ProxyURL: func() string { return proxySrv.URL }})
+	req, err := http.NewRequest(http.MethodGet, "http://updates.invalid/ping", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	resp, err := p.doAPI(req)
+	if err != nil {
+		t.Fatalf("proxy request failed: %v", err)
+	}
+	defer resp.Body.Close()
+	if hits != 1 {
+		t.Fatalf("expected one proxy request, got %d", hits)
+	}
+}
+
+func TestAPIRequestFallsBackToDirect(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write([]byte("ok"))
+	}))
+	defer srv.Close()
+
+	p := NewProvider(Config{
+		Repository: "acme/app",
+		BaseURL:    srv.URL,
+		ProxyURL:   func() string { return "socks5://127.0.0.1:1" },
+	})
+	req, err := http.NewRequest(http.MethodGet, srv.URL+"/ping", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	resp, err := p.doAPI(req)
+	if err != nil {
+		t.Fatalf("expected a direct fallback, got %v", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("status = %d", resp.StatusCode)
+	}
 }
 
 func TestProviderCheck(t *testing.T) {
