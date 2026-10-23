@@ -42,11 +42,11 @@ type OutboundConn struct {
 	sent uint64
 	recv uint64
 
-	metadata          *tunnel.Metadata
-	user              statistic.User
-	headerMutex       sync.Mutex
-	headerWritten     bool
-	headerTimer       *time.Timer
+	metadata      *tunnel.Metadata
+	user          statistic.User
+	headerMutex   sync.Mutex
+	headerWritten bool
+	headerTimer   *time.Timer
 	net.Conn
 }
 

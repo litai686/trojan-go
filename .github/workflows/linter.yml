@@ -2,31 +2,19 @@ name: Linter
 
 on:
   push:
-    branches:
-      - master
-    paths:
-      - "**/*.go"
-      - ".github/workflows/linter.yml"
-      - ".github/linters/.golangci.yml"
-  pull_request:
-    types: [opened, synchronize, reopened]
-    branches:
-      - master
-    paths:
-      - "**/*.go"
-      - ".github/workflows/linter.yml"
-      - ".github/linters/.golangci.yml"
+    tags:
+      - "v*.*.*"
 
 jobs:
   lint:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout codebase
-        uses: actions/checkout@v2
+        uses: actions/checkout@v7
 
       - name: golangci-lint
-        uses: golangci/golangci-lint-action@v2
+        uses: golangci/golangci-lint-action@v9
         with:
-          version: latest
+          version: v2.15.0
           args: --config=.github/linters/.golangci.yml
           only-new-issues: true

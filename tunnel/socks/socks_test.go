@@ -87,7 +87,7 @@ func TestSocks(t *testing.T) {
 	recvBuf := make([]byte, 4096)
 	n, m, err := packet.ReadWithMetadata(recvBuf)
 	common.Must(err)
-	if m.DomainName != "google.com" || m.Port != 12345 || n != 1024 || !(bytes.Equal(recvBuf[:n], payload)) {
+	if m.DomainName != "google.com" || m.Port != 12345 || n != 1024 || !bytes.Equal(recvBuf[:n], payload) {
 		t.Fail()
 	}
 
