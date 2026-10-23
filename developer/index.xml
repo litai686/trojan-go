@@ -1,0 +1,91 @@
+<?xml version="1.0" encoding="utf-8" standalone="yes"?>
+<rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom">
+  <channel>
+    <title>实现细节和开发指南 on Trojan-Go Docs</title>
+    <link>https://p4gefau1t.github.io/trojan-go/developer/</link>
+    <description>Recent content in 实现细节和开发指南 on Trojan-Go Docs</description>
+    <generator>Hugo -- gohugo.io</generator>
+    <language>zh-CN</language><atom:link href="https://p4gefau1t.github.io/trojan-go/developer/index.xml" rel="self" type="application/rss+xml" />
+    <item>
+      <title>基本介绍</title>
+      <link>https://p4gefau1t.github.io/trojan-go/developer/overview/</link>
+      <pubDate>Mon, 01 Jan 0001 00:00:00 +0000</pubDate>
+      
+      <guid>https://p4gefau1t.github.io/trojan-go/developer/overview/</guid>
+      <description>Trojan-Go的核心部分有 tunnel 各个协议具体实现 proxy 代理核心 config 配置注册和解析模块 redirector 主动检测欺骗模块 statistics 用户认证和统计模块 可以在对应文件夹中找到相</description>
+    </item>
+    
+    <item>
+      <title>编译和自定义Trojan-Go</title>
+      <link>https://p4gefau1t.github.io/trojan-go/developer/build/</link>
+      <pubDate>Mon, 01 Jan 0001 00:00:00 +0000</pubDate>
+      
+      <guid>https://p4gefau1t.github.io/trojan-go/developer/build/</guid>
+      <description>编译需要Go版本号高于1.14.x，请在编译前确认你的编译器版本。推荐使用snap安装和更新go。 编译方式非常简单，可以直接使用一键编译脚本</description>
+    </item>
+    
+    <item>
+      <title>Trojan协议</title>
+      <link>https://p4gefau1t.github.io/trojan-go/developer/trojan/</link>
+      <pubDate>Mon, 01 Jan 0001 00:00:00 +0000</pubDate>
+      
+      <guid>https://p4gefau1t.github.io/trojan-go/developer/trojan/</guid>
+      <description>Trojan-Go遵循原始的trojan协议，具体格式可以参考Trojan文档，这里不再赘述。 默认情况下，trojan协议使用TLS来承载，</description>
+    </item>
+    
+    <item>
+      <title>多路复用</title>
+      <link>https://p4gefau1t.github.io/trojan-go/developer/mux/</link>
+      <pubDate>Mon, 01 Jan 0001 00:00:00 +0000</pubDate>
+      
+      <guid>https://p4gefau1t.github.io/trojan-go/developer/mux/</guid>
+      <description>Trojan-Go使用smux实现多路复用。同时实现了simplesocks协议用于进行代理传输。 当启用多路复用时，客户端首先发起TLS连接</description>
+    </item>
+    
+    <item>
+      <title>Websocket</title>
+      <link>https://p4gefau1t.github.io/trojan-go/developer/websocket/</link>
+      <pubDate>Mon, 01 Jan 0001 00:00:00 +0000</pubDate>
+      
+      <guid>https://p4gefau1t.github.io/trojan-go/developer/websocket/</guid>
+      <description>由于使用CDN中转时，HTTPS对CDN透明，CDN可以审查Websocket传输内容。而Trojan协议本身是明文传输，因此为保证安全性，</description>
+    </item>
+    
+    <item>
+      <title>SimpleSocks协议</title>
+      <link>https://p4gefau1t.github.io/trojan-go/developer/simplesocks/</link>
+      <pubDate>Mon, 01 Jan 0001 00:00:00 +0000</pubDate>
+      
+      <guid>https://p4gefau1t.github.io/trojan-go/developer/simplesocks/</guid>
+      <description>SimpleSocks协议是无鉴权机制的简单代理协议，本质上是去除了sha224的Trojan协议。使用该协议的目的是减少多路复用时的ove</description>
+    </item>
+    
+    <item>
+      <title>API开发</title>
+      <link>https://p4gefau1t.github.io/trojan-go/developer/api/</link>
+      <pubDate>Mon, 01 Jan 0001 00:00:00 +0000</pubDate>
+      
+      <guid>https://p4gefau1t.github.io/trojan-go/developer/api/</guid>
+      <description>Trojan-Go基于gRPC实现了API，使用protobuf交换数据。客户端可获取流量和速度信息；服务端可获取各用户流量，速度，在线情况</description>
+    </item>
+    
+    <item>
+      <title>可插拔传输层插件开发</title>
+      <link>https://p4gefau1t.github.io/trojan-go/developer/plugin/</link>
+      <pubDate>Mon, 01 Jan 0001 00:00:00 +0000</pubDate>
+      
+      <guid>https://p4gefau1t.github.io/trojan-go/developer/plugin/</guid>
+      <description>Trojan-Go鼓励开发传输层插件，以丰富协议类型，增加与GFW对抗的战略纵深。 传输层插件的作用，是替代tansport隧道的TLS进行传</description>
+    </item>
+    
+    <item>
+      <title>URL方案（草案）</title>
+      <link>https://p4gefau1t.github.io/trojan-go/developer/url/</link>
+      <pubDate>Mon, 01 Jan 0001 00:00:00 +0000</pubDate>
+      
+      <guid>https://p4gefau1t.github.io/trojan-go/developer/url/</guid>
+      <description>Changelog encryption 格式修改为 ss;method:password 概述 感谢 @DuckSoft @StudentMain @phlinhng 对 Trojan-Go URL 方案的讨论和贡献。目前 URL 方案为草案，需要更多的实践和讨论。 Trojan-Go客户端可以接受URL，以定位</description>
+    </item>
+    
+  </channel>
+</rss>

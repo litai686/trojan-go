@@ -1,0 +1,158 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head><meta charset="utf-8">
+<meta http-equiv="X-UA-Compatible" content="IE=edge">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<title>可插拔传输层插件开发 - Trojan-Go Docs</title>
+<meta name="description" content="An unidentifiable mechanism that helps you bypass GFW.">
+<meta name="generator" content="Hugo 0.83.1" />
+<link href="https://p4gefau1t.github.io/trojan-goindex.xml" rel="alternate" type="application/rss+xml">
+<link rel="canonical" href="https://p4gefau1t.github.io/trojan-go/developer/plugin/">
+<link rel="stylesheet" href="https://p4gefau1t.github.io/trojan-go/css/theme.min.css">
+<script src="https://use.fontawesome.com/releases/v5.0.6/js/all.js"></script>
+<link rel="stylesheet" href="https://p4gefau1t.github.io/trojan-go/css/chroma.min.css">
+<script src="https://cdn.jsdelivr.net/npm/jquery@3.4.1/dist/jquery.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/jquery.easing@1.4.1/jquery.easing.min.js"></script>
+<script src="https://p4gefau1t.github.io/trojan-go/js/bundle.js"></script><style>
+:root {}
+</style>
+<meta property="og:title" content="可插拔传输层插件开发" />
+<meta property="og:description" content="Trojan-Go鼓励开发传输层插件，以丰富协议类型，增加与GFW对抗的战略纵深。 传输层插件的作用，是替代tansport隧道的TLS进行传" />
+<meta property="og:type" content="article" />
+<meta property="og:url" content="https://p4gefau1t.github.io/trojan-go/developer/plugin/" /><meta property="og:image" content="https://p4gefau1t.github.io/trojan-go/images/og-image.png"/><meta property="article:section" content="developer" />
+
+<meta property="og:site_name" content="Trojan-Go Docs" />
+
+<meta name="twitter:card" content="summary_large_image"/>
+<meta name="twitter:image" content="https://p4gefau1t.github.io/trojan-go/images/og-image.png"/>
+
+<meta name="twitter:title" content="可插拔传输层插件开发"/>
+<meta name="twitter:description" content="Trojan-Go鼓励开发传输层插件，以丰富协议类型，增加与GFW对抗的战略纵深。 传输层插件的作用，是替代tansport隧道的TLS进行传"/>
+<meta itemprop="name" content="可插拔传输层插件开发">
+<meta itemprop="description" content="Trojan-Go鼓励开发传输层插件，以丰富协议类型，增加与GFW对抗的战略纵深。 传输层插件的作用，是替代tansport隧道的TLS进行传">
+
+<meta itemprop="wordCount" content="1072"><meta itemprop="image" content="https://p4gefau1t.github.io/trojan-go/images/og-image.png"/>
+<meta itemprop="keywords" content="" /></head>
+<body><div class="container"><header>
+<h1>Trojan-Go Docs</h1>
+<a href="https://github.com/p4gefau1t/trojan-go" class="github"><i class="fab fa-github"></i></a>
+<p class="description">An unidentifiable mechanism that helps you bypass GFW.</p>
+
+</header>
+<div class="global-menu">
+<nav>
+<ul>
+<li><a href="/trojan-go/">Home</a></li>
+<li><a href="https://github.com/p4gefau1t">GitHub</a></li></ul>
+</nav>
+</div>
+<div class="content-container">
+<main><h1>可插拔传输层插件开发</h1>
+<p>Trojan-Go鼓励开发传输层插件，以丰富协议类型，增加与GFW对抗的战略纵深。</p>
+<p>传输层插件的作用，是替代tansport隧道的TLS进行传输加密和混淆。</p>
+<p>插件与Trojan-Go基于TCP Socket通讯，与Trojan-Go本身不存在任何耦合关系，你可以使用任何你喜欢的语言和设计模式进行开发。我们建议的参照<a href="https://shadowsocks.org/en/spec/Plugin.html">SIP003</a>标准进行开发。如此开发的插件可以同时用于Trojan-Go和Shadowsocks。</p>
+<p>Trojan-Go开启插件功能后，仅使用TCP进行传输（明文）。你的插件只需要处理入站的TCP请求即可。你可以将这些TCP流量转换成任何你喜欢的流量格式，如QUIC，HTTP，甚至是ICMP。</p>
+<p>Trojan-Go插件设计原则，与Shadowsocks略有不同：</p>
+<ol>
+<li>
+<p>插件本身可以对传输内容进行加密，混淆和完整性校验，以及可以抵抗重放攻击。</p>
+</li>
+<li>
+<p>插件应该伪造一种已有的、常见的服务（记做X服务），及其流量，在此基础上嵌入自己的加密内容。</p>
+</li>
+<li>
+<p>服务端的插件，在检验到内容被篡改/遭到重放时，<strong>必须将此连接交由Trojan-Go处理</strong>。具体步骤是，将已读入和未读入的内容一并发送给Trojan-Go，并建立双向连接，而不是直接断开。Trojan-Go将与一个真实的X服务器建立连接，使攻击者直接与真实的X服务器进行交互。</p>
+</li>
+</ol>
+<p>解释如下：</p>
+<p>第一点原则，是由于Trojan协议本身并不加密。将TLS替换为传输层插件后，将<strong>完全信任插件的安全性</strong>。</p>
+<p>第二点原则，是继承Trojan的精神。最适合隐藏一棵树的地方，是森林。</p>
+<p>第三点原则，是为了充分利用Trojan-Go的抗主动探测特性。即使GFW对你的服务器进行主动探测，你的服务器也可以表现得与X服务一致，而不存在其他特征。</p>
+<p>为了方便理解，举一个例子。</p>
+<ol>
+<li>
+<p>假设你的插件伪装的是MySQL流量。防火墙通过流量嗅探，发现你的MySQL流量大得异常，决定主动连接你的服务器进行主动探测。</p>
+</li>
+<li>
+<p>防火墙连接到你的服务器并发送探测载荷，你的Trojan-Go服务端插件，经过校验，发现这个异常连接不是代理流量，于是将这个连接交由Trojan-Go处理。</p>
+</li>
+<li>
+<p>Trojan-Go发现这个连接异常，将这个连接重定向到一个真正的MySQL服务器上。于是，防火墙开始与一个真正的MySQL服务器进行交互，发现其行为与真实MySQL服务器无异，无法对服务器进行封禁。</p>
+</li>
+</ol>
+<p>另外，即使你的协议协议和插件不能满足原则2和原则3，甚至不能很好满足原则1，我们同样鼓励开发。因为GFW仅仅针对流行的协议进行审计和封锁，此类协议（土制密码学/土制协议）只要不公开发表，同样能保持非常强健的生命力。</p>
+<div class="edit-meta">
+
+<br><a href="https://github.com/p4gefau1t/trojan-go/docs/edit/master/content/developer/plugin.md" class="edit-page"><i class="fas fa-pen-square"></i> Edit on GitHub</a></div><nav class="pagination"><a class="nav nav-prev" href="https://p4gefau1t.github.io/trojan-go/developer/api/" title="API开发"><i class="fas fa-arrow-left" aria-hidden="true"></i> Prev - API开发</a>
+<a class="nav nav-next" href="https://p4gefau1t.github.io/trojan-go/developer/url/" title="URL方案（草案）">Next - URL方案（草案） <i class="fas fa-arrow-right" aria-hidden="true"></i></a>
+</nav><footer><p class="powered">Powered by <a href="https://gohugo.io">Hugo</a>. Theme by <a href="https://themes.gohugo.io/hugo-theme-techdoc/">TechDoc</a>. Designed by <a href="https://github.com/thingsym/hugo-theme-techdoc">Thingsym</a>.</p>
+</footer>
+</main><div class="sidebar">
+
+<nav class="open-menu">
+<ul>
+<li class=""><a href="https://p4gefau1t.github.io/trojan-go">Home</a></li>
+
+<li class=""><a href="https://p4gefau1t.github.io/trojan-go/basic/">基本配置</a>
+  
+<ul class="sub-menu">
+<li class=""><a href="https://p4gefau1t.github.io/trojan-go/basic/trojan/">Trojan基本原理</a></li>
+<li class=""><a href="https://p4gefau1t.github.io/trojan-go/basic/config/">正确配置Trojan-Go</a></li>
+<li class=""><a href="https://p4gefau1t.github.io/trojan-go/basic/full-config/">完整的配置文件</a></li>
+</ul>
+  
+</li>
+
+<li class=""><a href="https://p4gefau1t.github.io/trojan-go/advance/">高级配置</a>
+  
+<ul class="sub-menu">
+<li class=""><a href="https://p4gefau1t.github.io/trojan-go/advance/mux/">启用多路复用提升网络并发性能</a></li>
+<li class=""><a href="https://p4gefau1t.github.io/trojan-go/advance/websocket/">使用Websocket进行CDN转发和抵抗中间人攻击</a></li>
+<li class=""><a href="https://p4gefau1t.github.io/trojan-go/advance/router/">国内直连和广告屏蔽</a></li>
+<li class=""><a href="https://p4gefau1t.github.io/trojan-go/advance/forward/">隧道和反向代理</a></li>
+<li class=""><a href="https://p4gefau1t.github.io/trojan-go/advance/nginx-relay/">一种基于SNI代理的多路径分流中继方案</a></li>
+<li class=""><a href="https://p4gefau1t.github.io/trojan-go/advance/plugin/">使用Shadowsocks插件/可插拔传输层</a></li>
+<li class=""><a href="https://p4gefau1t.github.io/trojan-go/advance/aead/">使用Shadowsocks AEAD进行二次加密</a></li>
+<li class=""><a href="https://p4gefau1t.github.io/trojan-go/advance/customize-protocol-stack/">自定义协议栈</a></li>
+<li class=""><a href="https://p4gefau1t.github.io/trojan-go/advance/api/">使用API动态管理用户</a></li>
+<li class=""><a href="https://p4gefau1t.github.io/trojan-go/advance/nat/">透明代理</a></li>
+</ul>
+  
+</li>
+
+<li class="parent"><a href="https://p4gefau1t.github.io/trojan-go/developer/">实现细节和开发指南</a>
+  
+<ul class="sub-menu">
+<li class=""><a href="https://p4gefau1t.github.io/trojan-go/developer/overview/">基本介绍</a></li>
+<li class=""><a href="https://p4gefau1t.github.io/trojan-go/developer/build/">编译和自定义Trojan-Go</a></li>
+<li class=""><a href="https://p4gefau1t.github.io/trojan-go/developer/trojan/">Trojan协议</a></li>
+<li class=""><a href="https://p4gefau1t.github.io/trojan-go/developer/mux/">多路复用</a></li>
+<li class=""><a href="https://p4gefau1t.github.io/trojan-go/developer/websocket/">Websocket</a></li>
+<li class=""><a href="https://p4gefau1t.github.io/trojan-go/developer/simplesocks/">SimpleSocks协议</a></li>
+<li class=""><a href="https://p4gefau1t.github.io/trojan-go/developer/api/">API开发</a></li>
+<li class="active"><a href="https://p4gefau1t.github.io/trojan-go/developer/plugin/">可插拔传输层插件开发</a></li>
+<li class=""><a href="https://p4gefau1t.github.io/trojan-go/developer/url/">URL方案（草案）</a></li>
+</ul>
+  
+</li>
+</ul>
+</nav>
+
+
+
+<div class="sidebar-footer"></div>
+</div>
+</div><a href="#" id="backtothetop-fixed" class="backtothetop"
+ data-backtothetop-duration="600"
+ data-backtothetop-easing="easeOutQuart"
+ data-backtothetop-fixed-fadeIn="1000"
+ data-backtothetop-fixed-fadeOut="1000"
+ data-backtothetop-fixed-bottom="10"
+ data-backtothetop-fixed-right="20">
+<span class="fa-layers fa-fw">
+<i class="fas fa-circle"></i>
+<i class="fas fa-arrow-circle-up"></i>
+</span></a>
+</div>
+</body>
+</html>

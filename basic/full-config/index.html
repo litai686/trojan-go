@@ -1,0 +1,446 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head><meta charset="utf-8">
+<meta http-equiv="X-UA-Compatible" content="IE=edge">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<title>完整的配置文件 - Trojan-Go Docs</title>
+<meta name="description" content="An unidentifiable mechanism that helps you bypass GFW.">
+<meta name="generator" content="Hugo 0.83.1" />
+<link href="https://p4gefau1t.github.io/trojan-goindex.xml" rel="alternate" type="application/rss+xml">
+<link rel="canonical" href="https://p4gefau1t.github.io/trojan-go/basic/full-config/">
+<link rel="stylesheet" href="https://p4gefau1t.github.io/trojan-go/css/theme.min.css">
+<script src="https://use.fontawesome.com/releases/v5.0.6/js/all.js"></script>
+<link rel="stylesheet" href="https://p4gefau1t.github.io/trojan-go/css/chroma.min.css">
+<script src="https://cdn.jsdelivr.net/npm/jquery@3.4.1/dist/jquery.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/jquery.easing@1.4.1/jquery.easing.min.js"></script>
+<script src="https://p4gefau1t.github.io/trojan-go/js/bundle.js"></script><style>
+:root {}
+</style>
+<meta property="og:title" content="完整的配置文件" />
+<meta property="og:description" content="下面是一个完整的配置文件，其中的必填选项有 run_type local_addr local_port remote_addr remote_port 对于服务器server，key和cert为必填。 对于客户端client，反向代理隧道fo" />
+<meta property="og:type" content="article" />
+<meta property="og:url" content="https://p4gefau1t.github.io/trojan-go/basic/full-config/" /><meta property="og:image" content="https://p4gefau1t.github.io/trojan-go/images/og-image.png"/><meta property="article:section" content="basic" />
+
+<meta property="og:site_name" content="Trojan-Go Docs" />
+
+<meta name="twitter:card" content="summary_large_image"/>
+<meta name="twitter:image" content="https://p4gefau1t.github.io/trojan-go/images/og-image.png"/>
+
+<meta name="twitter:title" content="完整的配置文件"/>
+<meta name="twitter:description" content="下面是一个完整的配置文件，其中的必填选项有 run_type local_addr local_port remote_addr remote_port 对于服务器server，key和cert为必填。 对于客户端client，反向代理隧道fo"/>
+<meta itemprop="name" content="完整的配置文件">
+<meta itemprop="description" content="下面是一个完整的配置文件，其中的必填选项有 run_type local_addr local_port remote_addr remote_port 对于服务器server，key和cert为必填。 对于客户端client，反向代理隧道fo">
+
+<meta itemprop="wordCount" content="6731"><meta itemprop="image" content="https://p4gefau1t.github.io/trojan-go/images/og-image.png"/>
+<meta itemprop="keywords" content="" /></head>
+<body><div class="container"><header>
+<h1>Trojan-Go Docs</h1>
+<a href="https://github.com/p4gefau1t/trojan-go" class="github"><i class="fab fa-github"></i></a>
+<p class="description">An unidentifiable mechanism that helps you bypass GFW.</p>
+
+</header>
+<div class="global-menu">
+<nav>
+<ul>
+<li><a href="/trojan-go/">Home</a></li>
+<li><a href="https://github.com/p4gefau1t">GitHub</a></li></ul>
+</nav>
+</div>
+<div class="content-container">
+<main><h1>完整的配置文件</h1>
+<p>下面是一个完整的配置文件，其中的必填选项有</p>
+<ul>
+<li>
+<p><code>run_type</code></p>
+</li>
+<li>
+<p><code>local_addr</code></p>
+</li>
+<li>
+<p><code>local_port</code></p>
+</li>
+<li>
+<p><code>remote_addr</code></p>
+</li>
+<li>
+<p><code>remote_port</code></p>
+</li>
+</ul>
+<p>对于服务器<code>server</code>，<code>key</code>和<code>cert</code>为必填。</p>
+<p>对于客户端<code>client</code>，反向代理隧道<code>forward</code>，以及透明代理<code>nat</code>，<code>password</code>必填</p>
+<p>其余未填的选项，用下面给出的值进行填充。</p>
+<p><em>Trojan-Go支持对人类更友好的YAML语法，配置文件的基本结构与JSON相同，效果等价。但是为了遵守YAML的命名习惯，你需要把下划线(&quot;_&quot;)转换为横杠(&quot;-&quot;)，如<code>remote_addr</code>在YAML文件中为<code>remote-addr</code></em></p>
+<div class="highlight"><pre style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-json" data-lang="json">{
+  <span style="color:#f92672">&#34;run_type&#34;</span>: <span style="color:#960050;background-color:#1e0010">*required*</span>,
+  <span style="color:#f92672">&#34;local_addr&#34;</span>: <span style="color:#960050;background-color:#1e0010">*required*</span>,
+  <span style="color:#f92672">&#34;local_port&#34;</span>: <span style="color:#960050;background-color:#1e0010">*required*</span>,
+  <span style="color:#f92672">&#34;remote_addr&#34;</span>: <span style="color:#960050;background-color:#1e0010">*required*</span>,
+  <span style="color:#f92672">&#34;remote_port&#34;</span>: <span style="color:#960050;background-color:#1e0010">*required*</span>,
+  <span style="color:#f92672">&#34;log_level&#34;</span>: <span style="color:#ae81ff">1</span>,
+  <span style="color:#f92672">&#34;log_file&#34;</span>: <span style="color:#e6db74">&#34;&#34;</span>,
+  <span style="color:#f92672">&#34;password&#34;</span>: [],
+  <span style="color:#f92672">&#34;disable_http_check&#34;</span>: <span style="color:#66d9ef">false</span>,
+  <span style="color:#f92672">&#34;udp_timeout&#34;</span>: <span style="color:#ae81ff">60</span>,
+  <span style="color:#f92672">&#34;ssl&#34;</span>: {
+    <span style="color:#f92672">&#34;verify&#34;</span>: <span style="color:#66d9ef">true</span>,
+    <span style="color:#f92672">&#34;verify_hostname&#34;</span>: <span style="color:#66d9ef">true</span>,
+    <span style="color:#f92672">&#34;cert&#34;</span>: <span style="color:#960050;background-color:#1e0010">*required*</span>,
+    <span style="color:#f92672">&#34;key&#34;</span>: <span style="color:#960050;background-color:#1e0010">*required*</span>,
+    <span style="color:#f92672">&#34;key_password&#34;</span>: <span style="color:#e6db74">&#34;&#34;</span>,
+    <span style="color:#f92672">&#34;cipher&#34;</span>: <span style="color:#e6db74">&#34;&#34;</span>,
+    <span style="color:#f92672">&#34;curves&#34;</span>: <span style="color:#e6db74">&#34;&#34;</span>,
+    <span style="color:#f92672">&#34;prefer_server_cipher&#34;</span>: <span style="color:#66d9ef">false</span>,
+    <span style="color:#f92672">&#34;sni&#34;</span>: <span style="color:#e6db74">&#34;&#34;</span>,
+    <span style="color:#f92672">&#34;alpn&#34;</span>: [
+      <span style="color:#e6db74">&#34;http/1.1&#34;</span>
+    ],
+    <span style="color:#f92672">&#34;session_ticket&#34;</span>: <span style="color:#66d9ef">true</span>,
+    <span style="color:#f92672">&#34;reuse_session&#34;</span>: <span style="color:#66d9ef">true</span>,
+    <span style="color:#f92672">&#34;plain_http_response&#34;</span>: <span style="color:#e6db74">&#34;&#34;</span>,
+    <span style="color:#f92672">&#34;fallback_addr&#34;</span>: <span style="color:#e6db74">&#34;&#34;</span>,
+    <span style="color:#f92672">&#34;fallback_port&#34;</span>: <span style="color:#ae81ff">0</span>,
+    <span style="color:#f92672">&#34;fingerprint&#34;</span>: <span style="color:#e6db74">&#34;&#34;</span>
+  },
+  <span style="color:#f92672">&#34;tcp&#34;</span>: {
+    <span style="color:#f92672">&#34;no_delay&#34;</span>: <span style="color:#66d9ef">true</span>,
+    <span style="color:#f92672">&#34;keep_alive&#34;</span>: <span style="color:#66d9ef">true</span>,
+    <span style="color:#f92672">&#34;prefer_ipv4&#34;</span>: <span style="color:#66d9ef">false</span>
+  },
+  <span style="color:#f92672">&#34;mux&#34;</span>: {
+    <span style="color:#f92672">&#34;enabled&#34;</span>: <span style="color:#66d9ef">false</span>,
+    <span style="color:#f92672">&#34;concurrency&#34;</span>: <span style="color:#ae81ff">8</span>,
+    <span style="color:#f92672">&#34;idle_timeout&#34;</span>: <span style="color:#ae81ff">60</span>
+  },
+  <span style="color:#f92672">&#34;router&#34;</span>: {
+    <span style="color:#f92672">&#34;enabled&#34;</span>: <span style="color:#66d9ef">false</span>,
+    <span style="color:#f92672">&#34;bypass&#34;</span>: [],
+    <span style="color:#f92672">&#34;proxy&#34;</span>: [],
+    <span style="color:#f92672">&#34;block&#34;</span>: [],
+    <span style="color:#f92672">&#34;default_policy&#34;</span>: <span style="color:#e6db74">&#34;proxy&#34;</span>,
+    <span style="color:#f92672">&#34;domain_strategy&#34;</span>: <span style="color:#e6db74">&#34;as_is&#34;</span>,
+    <span style="color:#f92672">&#34;geoip&#34;</span>: <span style="color:#e6db74">&#34;$PROGRAM_DIR$/geoip.dat&#34;</span>,
+    <span style="color:#f92672">&#34;geosite&#34;</span>: <span style="color:#e6db74">&#34;$PROGRAM_DIR$/geosite.dat&#34;</span>
+  },
+  <span style="color:#f92672">&#34;websocket&#34;</span>: {
+    <span style="color:#f92672">&#34;enabled&#34;</span>: <span style="color:#66d9ef">false</span>,
+    <span style="color:#f92672">&#34;path&#34;</span>: <span style="color:#e6db74">&#34;&#34;</span>,
+    <span style="color:#f92672">&#34;host&#34;</span>: <span style="color:#e6db74">&#34;&#34;</span>
+  },
+  <span style="color:#f92672">&#34;shadowsocks&#34;</span>: {
+    <span style="color:#f92672">&#34;enabled&#34;</span>: <span style="color:#66d9ef">false</span>,
+    <span style="color:#f92672">&#34;method&#34;</span>: <span style="color:#e6db74">&#34;AES-128-GCM&#34;</span>,
+    <span style="color:#f92672">&#34;password&#34;</span>: <span style="color:#e6db74">&#34;&#34;</span>
+  },
+  <span style="color:#f92672">&#34;transport_plugin&#34;</span>: {
+    <span style="color:#f92672">&#34;enabled&#34;</span>: <span style="color:#66d9ef">false</span>,
+    <span style="color:#f92672">&#34;type&#34;</span>: <span style="color:#e6db74">&#34;&#34;</span>,
+    <span style="color:#f92672">&#34;command&#34;</span>: <span style="color:#e6db74">&#34;&#34;</span>,
+    <span style="color:#f92672">&#34;option&#34;</span>: <span style="color:#e6db74">&#34;&#34;</span>,
+    <span style="color:#f92672">&#34;arg&#34;</span>: [],
+    <span style="color:#f92672">&#34;env&#34;</span>: []
+  },
+  <span style="color:#f92672">&#34;forward_proxy&#34;</span>: {
+    <span style="color:#f92672">&#34;enabled&#34;</span>: <span style="color:#66d9ef">false</span>,
+    <span style="color:#f92672">&#34;proxy_addr&#34;</span>: <span style="color:#e6db74">&#34;&#34;</span>,
+    <span style="color:#f92672">&#34;proxy_port&#34;</span>: <span style="color:#ae81ff">0</span>,
+    <span style="color:#f92672">&#34;username&#34;</span>: <span style="color:#e6db74">&#34;&#34;</span>,
+    <span style="color:#f92672">&#34;password&#34;</span>: <span style="color:#e6db74">&#34;&#34;</span>
+  },
+  <span style="color:#f92672">&#34;sqlite&#34;</span>: {
+    <span style="color:#f92672">&#34;enabled&#34;</span>: <span style="color:#66d9ef">false</span>,
+    <span style="color:#f92672">&#34;database&#34;</span>: <span style="color:#e6db74">&#34;trojan-go.db&#34;</span>,
+    <span style="color:#f92672">&#34;check_rate&#34;</span>: <span style="color:#ae81ff">30</span>
+  },
+  <span style="color:#f92672">&#34;api&#34;</span>: {
+    <span style="color:#f92672">&#34;enabled&#34;</span>: <span style="color:#66d9ef">false</span>,
+    <span style="color:#f92672">&#34;api_addr&#34;</span>: <span style="color:#e6db74">&#34;&#34;</span>,
+    <span style="color:#f92672">&#34;api_port&#34;</span>: <span style="color:#ae81ff">0</span>,
+    <span style="color:#f92672">&#34;ssl&#34;</span>: {
+      <span style="color:#f92672">&#34;enabled&#34;</span>: <span style="color:#66d9ef">false</span>,
+      <span style="color:#f92672">&#34;key&#34;</span>: <span style="color:#e6db74">&#34;&#34;</span>,
+      <span style="color:#f92672">&#34;cert&#34;</span>: <span style="color:#e6db74">&#34;&#34;</span>,
+      <span style="color:#f92672">&#34;verify_client&#34;</span>: <span style="color:#66d9ef">false</span>,
+      <span style="color:#f92672">&#34;client_cert&#34;</span>: []
+    }
+  }
+}
+</code></pre></div><h2 id="说明">说明</h2>
+<h3 id="一般选项">一般选项</h3>
+<p>对于client/nat/forward，<code>remote_xxxx</code>应当填写你的trojan服务器地址和端口号，<code>local_xxxx</code>对应本地开放的socks5/http代理地址（自动适配）</p>
+<p>对于server，<code>local_xxxx</code>对应trojan服务器监听地址（强烈建议使用443端口），<code>remote_xxxx</code>填写识别到非trojan流量时代理到的HTTP服务地址，通常填写本地80端口。</p>
+<p><code>log_level</code>指定日志等级。等级越高，输出的信息越少。合法的值有</p>
+<ul>
+<li>
+<p>0 输出Debug以上日志（所有日志）</p>
+</li>
+<li>
+<p>1 输出Info及以上日志</p>
+</li>
+<li>
+<p>2 输出Warning及以上日志</p>
+</li>
+<li>
+<p>3 输出Error及以上日志</p>
+</li>
+<li>
+<p>4 输出Fatal及以上日志</p>
+</li>
+<li>
+<p>5 完全不输出日志</p>
+</li>
+</ul>
+<p><code>log_file</code>指定日志输出文件路径。如果未指定则使用标准输出。</p>
+<p><code>password</code>可以填入多个密码。除了使用配置文件配置密码之外，trojan-go还支持使用sqlite配置密码，参见下文。客户端的密码，只有与服务端配置文件中或者在数据库中的密码记录一致，才能通过服务端的校验，正常使用代理服务。</p>
+<p><code>disable_http_check</code>是否禁用HTTP伪装服务器可用性检查。</p>
+<p><code>udp_timeout</code> UDP会话超时时间。</p>
+<h3 id="ssl选项"><code>ssl</code>选项</h3>
+<p><code>verify</code>表示客户端(client/nat/forward)是否校验服务端提供的证书合法性，默认开启。出于安全性考虑，这个选项不应该在实际场景中选择false，否则可能遭受中间人攻击。如果使用自签名或者自签发的证书，开启<code>verify</code>会导致校验失败。这种情况下，应当保持<code>verify</code>开启，然后在<code>cert</code>中填写服务端的证书，即可正常连接。</p>
+<p><code>verify_hostname</code>表示服务端是否校验客户端提供的SNI与服务端设置的一致性。如果服务端SNI字段留空，认证将被强制关闭。</p>
+<p>服务端必须填入<code>cert</code>和<code>key</code>，对应服务器的证书和私钥文件，请注意证书是否有效/过期。如果使用权威CA签发的证书，客户端(client/nat/forward)可以不填写<code>cert</code>。如果使用自签名或者自签发的证书，应当在的<code>cert</code>处填入服务器证书文件，否则可能导致校验失败。</p>
+<p><code>sni</code>指的是TLS客户端请求中的服务器名字段，一般和证书的Common Name相同。如果你使用let&rsquo;sencrypt等机构签发的证书，这里填入你的域名。对于客户端，如果这一项未填，将使用<code>remote_addr</code>填充。你应当指定一个有效的SNI（和远端证书CN一致），否则客户端可能无法验证远端证书有效性从而无法连接；对于服务端，若此项不填，则使用证书中Common Name作为SNI校验依据，支持通配符如*.example.com。</p>
+<p><code>fingerprint</code>用于指定客户端TLS Client Hello指纹伪造类型，以抵抗GFW对于TLS Client Hello指纹的特征识别和阻断。trojan-go使用<a href="https://github.com/refraction-networking/utls">utls</a>进行指纹伪造，默认伪造Firefox的指纹。合法的值有</p>
+<ul>
+<li>
+<p>&ldquo;&quot;，不使用指纹伪造（默认）</p>
+</li>
+<li>
+<p>&ldquo;firefox&rdquo;，伪造Firefox指纹</p>
+</li>
+<li>
+<p>&ldquo;chrome&rdquo;，伪造Chrome指纹</p>
+</li>
+<li>
+<p>&ldquo;ios&rdquo;，伪造iOS指纹</p>
+</li>
+</ul>
+<p>一旦指纹的值被设置，客户端的<code>cipher</code>，<code>curves</code>，<code>alpn</code>，<code>session_ticket</code>等有可能影响指纹的字段将使用该指纹的特定设置覆写。
+<code>alpn</code>为TLS的应用层协议协商指定协议。在TLS Client/Server Hello中传输，协商应用层使用的协议，仅用作指纹伪造，并无实际作用。<strong>如果使用了CDN，错误的alpn字段可能导致与CDN协商得到错误的应用层协议</strong>。</p>
+<p><code>prefer_server_cipher</code>客户端是否偏好选择服务端在协商中提供的密码学套件。</p>
+<p><code>cipher</code>TLS使用的密码学套件。```cipher13``字段与此字段合并。只有在你明确知道自己在做什么的情况下，才应该去填写此项以修改trojan-go使用的TLS密码学套件。<strong>正常情况下，你应该将其留空或者不填</strong>，trojan-go会根据当前硬件平台以及远端的情况，自动选择最合适的加密算法以提升性能和安全性。如果需要填写，密码学套件名用分号(&quot;:&quot;)分隔，按优先顺序排列。Go的TLS库中弃用了TLS1.2中部分不安全的密码学套件，并完全支持TLS1.3。默认情况下，trojan-go将优先使用更安全的TLS1.3。</p>
+<p><code>curves</code>指定TLS在ECDHE中偏好使用的椭圆曲线。只有你明确知道自己在做什么的情况下，才应该填写此项。曲线名称用分号(&quot;:&quot;)分隔，按优先顺序排列。</p>
+<p><code>plain_http_response</code>指服务端TLS握手失败时，明文发送的原始数据（原始TCP数据）。这个字段填入该文件路径。推荐使用<code>fallback_port</code>而不是该字段。</p>
+<p><code>fallback_addr</code>和<code>fallback_port</code>指服务端TLS握手失败时，trojan-go将该连接重定向到该地址。这是trojan-go的特性，以便更好地隐蔽服务器，抵抗GFW的主动检测，使得服务器的443端口在遭遇非TLS协议的探测时，行为与正常服务器完全一致。当服务器接受了一个连接但无法进行TLS握手时，如果<code>fallback_port</code>不为空，则流量将会被代理至fallback_addr:fallback_port。如果<code>fallback_addr</code>为空，则用<code>remote_addr</code>填充。例如，你可以在本地使用nginx开启一个https服务，当你的服务器443端口被非TLS协议请求时（比如http请求），trojan-go将代理至本地https服务器，nginx将使用http协议明文返回一个400 Bad Request页面。你可以通过使用浏览器访问<code>http://your-domain-name.com:443</code>进行验证。</p>
+<p><code>key_log</code>TLS密钥日志的文件路径。如果填写则开启密钥日志。<strong>记录密钥将破坏TLS的安全性，此项不应该用于除调试以外的其他任何用途。</strong></p>
+<h3 id="mux多路复用选项"><code>mux</code>多路复用选项</h3>
+<p>多路复用是trojan-go的特性。如果服务器和客户端都是trojan-go，可以开启mux多路复用以减少高并发情景下的延迟（只需要客户端开启此选项即可，服务端自动适配）。</p>
+<p>注意，多路复用的意义在于降低握手延迟，而不是提升链路速度。相反，它会增加客户端和服务端的CPU和内存消耗，从而可能造成速度下降。</p>
+<p><code>enabled</code>是否开启多路复用。</p>
+<p><code>concurrency</code>指单个TLS隧道可以承载的最大连接数，默认为8。这个数值越大，多连接并发时TLS由于握手产生的延迟就越低，但网络吞吐量可能会有所降低，填入负数或者0表示所有连接只使用一个TLS隧道承载。</p>
+<p><code>idle_timeout</code>空闲超时时间。指TLS隧道在空闲多长时间之后关闭，单位为秒。如果数值为负值或0，则一旦TLS隧道空闲，则立即关闭。</p>
+<h3 id="router路由选项"><code>router</code>路由选项</h3>
+<p>路由功能是trojan-go的特性。trojan-go的路由策略有三种。</p>
+<ul>
+<li>
+<p>Proxy 代理。将请求通过TLS隧道进行代理，由trojan服务器和目的地址进行连接。</p>
+</li>
+<li>
+<p>Bypass 绕过。直接在本地和目的地址进行连接。</p>
+</li>
+<li>
+<p>Block 封锁。不代理请求，直接关闭连接。</p>
+</li>
+</ul>
+<p>在<code>proxy</code>, <code>bypass</code>, <code>block</code>字段中填入对应列表geoip/geosite或路由规则，trojan-go即根据列表中的IP（CIDR）或域名执行相应路由策略。客户端(client)可以配置三种策略，服务端(server)只可配置block策略。</p>
+<p><code>enabled</code>是否开启路由模块。</p>
+<p><code>default_policy</code>指的是三个列表匹配均失败后，使用的默认策略，默认为&quot;proxy&rdquo;，即进行代理。合法的值有</p>
+<ul>
+<li>
+<p>&ldquo;proxy&rdquo;</p>
+</li>
+<li>
+<p>&ldquo;bypass&rdquo;</p>
+</li>
+<li>
+<p>&ldquo;block&rdquo;</p>
+</li>
+</ul>
+<p>含义同上。</p>
+<p><code>domain_strategy</code>域名解析策略，默认&quot;as_is&quot;。合法的值有：</p>
+<ul>
+<li>
+<p>&ldquo;as_is&rdquo;，只在各列表中的域名规则内进行匹配。</p>
+</li>
+<li>
+<p>&ldquo;ip_if_non_match&rdquo;，先在各列表中的域名规则内进行匹配；如果不匹配，则解析为IP后，在各列表中的IP地址规则内进行匹配。该策略可能导致DNS泄漏或遭到污染。</p>
+</li>
+<li>
+<p>&ldquo;ip_on_demand&rdquo;，先解析为IP，在各列表中的IP地址规则内进行匹配；如果不匹配，则在各列表中的域名规则内进行匹配。该策略可能导致DNS泄漏或遭到污染。</p>
+</li>
+</ul>
+<p><code>geoip</code>和<code>geosite</code>字段指geoip和geosite数据库文件路径，默认使用程序所在目录的geoip.dat和geosite.dat。也可以通过指定环境变量TROJAN_GO_LOCATION_ASSET指定工作目录。</p>
+<h3 id="websocket选项"><code>websocket</code>选项</h3>
+<p>Websocket传输是trojan-go的特性。在<strong>正常的直接连接代理节点</strong>的情况下，开启这个选项不会改善你的链路速度（甚至有可能下降），也不会提升你的连接安全性。你只应该在需要利用CDN进行中转，或利用nginx等服务器根据路径分发的情况下，使用websocket。</p>
+<p><code>enabled</code>表示是否启用Websocket承载流量，服务端开启后同时支持一般Trojan协议和基于websocket的Trojan协议，客户端开启后将只使用websocket承载所有Trojan协议流量。</p>
+<p><code>path</code>指的是Websocket使用的URL路径，必须以斜杠(&quot;/&quot;)开头，如&quot;/longlongwebsocketpath&quot;，并且服务器和客户端必须一致。</p>
+<p><code>host</code>Websocket握手时，HTTP请求中使用的主机名。客户端如果留空则使用<code>remote_addr</code>填充。如果使用了CDN，这个选项一般填入域名。不正确的<code>host</code>可能导致CDN无法转发请求。</p>
+<h3 id="shadowsocks-aead加密选项"><code>shadowsocks</code> AEAD加密选项</h3>
+<p>此选项用于替代弃用的混淆加密和双重TLS。如果此选项被设置启用，Trojan协议层下将插入一层Shadowsocks AEAD加密层。也即（已经加密的）TLS隧道内，所有的Trojan协议将再使用AEAD方法进行加密。注意，此选项和Websocket是否开启无关。无论Websocket是否开启，所有Trojan流量都会被再进行一次加密。</p>
+<p>注意，开启这个选项将有可能降低传输性能，你只应该在不信任承载Trojan协议的传输信道的情况下，启用这个选项。例如：</p>
+<ul>
+<li>
+<p>你使用了Websocket，经过不可信的CDN进行中转（如国内CDN）</p>
+</li>
+<li>
+<p>你与服务器的连接遭到了GFW针对TLS的中间人攻击</p>
+</li>
+<li>
+<p>你的证书失效，无法验证证书有效性</p>
+</li>
+<li>
+<p>你使用了无法保证密码学安全的可插拔传输层</p>
+</li>
+</ul>
+<p>等等。</p>
+<p>由于使用的是AEAD，trojan-go可以正确判断请求是否有效，是否遭到主动探测，并作出相应的响应。</p>
+<p><code>enabled</code>是否启用Shadowsocks AEAD加密Trojan协议层。</p>
+<p><code>method</code>加密方式。合法的值有：</p>
+<ul>
+<li>
+<p>&ldquo;CHACHA20-IETF-POLY1305&rdquo;</p>
+</li>
+<li>
+<p>&ldquo;AES-128-GCM&rdquo; (默认)</p>
+</li>
+<li>
+<p>&ldquo;AES-256-GCM&rdquo;</p>
+</li>
+</ul>
+<p><code>password</code>用于生成主密钥的密码。如果启用AEAD加密，必须确保客户端和服务端一致。</p>
+<h3 id="transport_plugin传输层插件选项"><code>transport_plugin</code>传输层插件选项</h3>
+<p><code>enabled</code>是否启用传输层插件替代TLS传输。一旦启用传输层插件支持，trojan-go将会把<strong>未经TLS加密的trojan协议流量明文传输给插件</strong>，以允许用户对流量进行自定义的混淆和加密。</p>
+<p><code>type</code>插件类型。目前支持的类型有</p>
+<ul>
+<li>
+<p>&ldquo;shadowsocks&rdquo;，支持符合<a href="https://shadowsocks.org/en/spec/Plugin.html">SIP003</a>标准的shadowsocks混淆插件。trojan-go将在启动时按照SIP003标准替换环境变量并修改自身配置(<code>remote_addr/remote_port/local_addr/local_port</code>)，使插件与远端直接通讯，而trojan-go仅监听/连接插件。</p>
+</li>
+<li>
+<p>&ldquo;plaintext&rdquo;，使用明文传输。选择此项，trojan-go不会修改任何地址配置(<code>remote_addr/remote_port/local_addr/local_port</code>)，也不会启动<code>command</code>中插件，仅移除最底层的TLS传输层并使用TCP明文传输。此选项目的为支持nginx等接管TLS并进行分流，以及高级用户进行调试测试。<strong>请勿直接使用明文传输模式穿透防火墙。</strong></p>
+</li>
+<li>
+<p>&ldquo;other&rdquo;，其他插件。选择此项，trojan-go不会修改任何地址配置(<code>remote_addr/remote_port/local_addr/local_port</code>)，但会启动<code>command</code>中插件并传入参数和环境变量。</p>
+</li>
+</ul>
+<p><code>command</code>传输层插件可执行文件的路径。trojan-go将在启动时一并执行它。</p>
+<p><code>arg</code>传输层插件启动参数。这是一个列表，例如<code>[&quot;-config&quot;, &quot;test.json&quot;]</code>。</p>
+<p><code>env</code>传输层插件环境变量。这是一个列表，例如<code>[&quot;VAR1=foo&quot;, &quot;VAR2=bar&quot;]</code>。</p>
+<p><code>option</code>传输层插件配置（SIP003)。例如<code>&quot;obfs=http;obfs-host=www.baidu.com&quot;</code>。</p>
+<h3 id="tcp选项"><code>tcp</code>选项</h3>
+<p><code>no_delay</code>TCP封包是否直接发出而不等待缓冲区填满。</p>
+<p><code>keep_alive</code>是否启用TCP心跳存活检测。</p>
+<p><code>prefer_ipv4</code>是否优先使用IPv4地址。</p>
+<h3 id="sqlite数据库选项"><code>sqlite</code>数据库选项</h3>
+<p>trojan-go使用纯Go实现的SQLite数据库进行用户验证，无需额外的数据库服务，也无需cgo。</p>
+<p><code>enabled</code>表示是否启用SQLite数据库进行用户验证。</p>
+<p><code>database</code>是SQLite数据库文件的路径，默认为<code>trojan-go.db</code>，文件不存在时会自动创建，users表会在首次启动时自动创建。</p>
+<p><code>check_rate</code>是trojan-go将流量写回数据库，并从数据库获取用户数据更新缓存的间隔时间，单位为秒。</p>
+<p>users表结构如下。注意这里的password指的是密码经过SHA224散列之后的值（字符串），流量download, upload, quota的单位是字节。你可以通过修改数据库users表中的用户记录的方式，添加和删除用户，或者指定用户的流量配额。trojan-go会根据所有的用户流量配额，自动更新当前有效的用户列表。如果download+upload&gt;quota，trojan-go服务器将拒绝该用户的连接。</p>
+<div class="highlight"><pre style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-sql" data-lang="sql"><span style="color:#66d9ef">CREATE</span> <span style="color:#66d9ef">TABLE</span> users (
+    id INTEGER <span style="color:#66d9ef">PRIMARY</span> <span style="color:#66d9ef">KEY</span> AUTOINCREMENT,
+    username TEXT <span style="color:#66d9ef">NOT</span> <span style="color:#66d9ef">NULL</span>,
+    password TEXT <span style="color:#66d9ef">NOT</span> <span style="color:#66d9ef">NULL</span>,
+    quota INTEGER <span style="color:#66d9ef">NOT</span> <span style="color:#66d9ef">NULL</span> <span style="color:#66d9ef">DEFAULT</span> <span style="color:#ae81ff">0</span>,
+    download INTEGER <span style="color:#66d9ef">NOT</span> <span style="color:#66d9ef">NULL</span> <span style="color:#66d9ef">DEFAULT</span> <span style="color:#ae81ff">0</span>,
+    upload INTEGER <span style="color:#66d9ef">NOT</span> <span style="color:#66d9ef">NULL</span> <span style="color:#66d9ef">DEFAULT</span> <span style="color:#ae81ff">0</span>
+);
+</code></pre></div><h3 id="forward_proxy前置代理选项"><code>forward_proxy</code>前置代理选项</h3>
+<p>前置代理选项允许使用其他代理承载trojan-go的流量</p>
+<p><code>enabled</code>是否启用前置代理(socks5)。</p>
+<p><code>proxy_addr</code>前置代理的主机地址。</p>
+<p><code>proxy_port</code>前置代理的端口号。</p>
+<p><code>username</code> <code>password</code>代理的用户和密码，如果留空则不使用认证。</p>
+<h3 id="api选项"><code>api</code>选项</h3>
+<p>trojan-go基于gRPC提供了API，以支持服务端和客户端的管理和统计。可以实现客户端的流量和速度统计，服务端各用户的流量和速度统计，用户的动态增删和限速等。</p>
+<p><code>enabled</code>是否启用API功能。</p>
+<p><code>api_addr</code>gRPC监听的地址。</p>
+<p><code>api_port</code>gRPC监听的端口。</p>
+<p><code>ssl</code> TLS相关设置。</p>
+<ul>
+<li>
+<p><code>enabled</code>是否使用TLS传输gRPC流量。</p>
+</li>
+<li>
+<p><code>key</code>，<code>cert</code>服务器私钥和证书。</p>
+</li>
+<li>
+<p><code>verify_client</code>是否认证客户端证书。</p>
+</li>
+<li>
+<p><code>client_cert</code>如果开启客户端认证，此处填入认证的客户端证书列表。</p>
+</li>
+</ul>
+<p>警告：<strong>不要将未开启TLS双向认证的API服务直接暴露在互联网上，否则可能导致各类安全问题。</strong></p>
+<div class="edit-meta">
+
+<br><a href="https://github.com/p4gefau1t/trojan-go/docs/edit/master/content/basic/full-config.md" class="edit-page"><i class="fas fa-pen-square"></i> Edit on GitHub</a></div><nav class="pagination"><a class="nav nav-prev" href="https://p4gefau1t.github.io/trojan-go/basic/config/" title="正确配置Trojan-Go"><i class="fas fa-arrow-left" aria-hidden="true"></i> Prev - 正确配置Trojan-Go</a>
+<a class="nav nav-next" href="https://p4gefau1t.github.io/trojan-go/advance/" title="高级配置">Next - 高级配置 <i class="fas fa-arrow-right" aria-hidden="true"></i></a>
+</nav><footer><p class="powered">Powered by <a href="https://gohugo.io">Hugo</a>. Theme by <a href="https://themes.gohugo.io/hugo-theme-techdoc/">TechDoc</a>. Designed by <a href="https://github.com/thingsym/hugo-theme-techdoc">Thingsym</a>.</p>
+</footer>
+</main><div class="sidebar">
+
+<nav class="open-menu">
+<ul>
+<li class=""><a href="https://p4gefau1t.github.io/trojan-go">Home</a></li>
+
+<li class="parent"><a href="https://p4gefau1t.github.io/trojan-go/basic/">基本配置</a>
+  
+<ul class="sub-menu">
+<li class=""><a href="https://p4gefau1t.github.io/trojan-go/basic/trojan/">Trojan基本原理</a></li>
+<li class=""><a href="https://p4gefau1t.github.io/trojan-go/basic/config/">正确配置Trojan-Go</a></li>
+<li class="active"><a href="https://p4gefau1t.github.io/trojan-go/basic/full-config/">完整的配置文件</a></li>
+</ul>
+  
+</li>
+
+<li class=""><a href="https://p4gefau1t.github.io/trojan-go/advance/">高级配置</a>
+  
+<ul class="sub-menu">
+<li class=""><a href="https://p4gefau1t.github.io/trojan-go/advance/mux/">启用多路复用提升网络并发性能</a></li>
+<li class=""><a href="https://p4gefau1t.github.io/trojan-go/advance/websocket/">使用Websocket进行CDN转发和抵抗中间人攻击</a></li>
+<li class=""><a href="https://p4gefau1t.github.io/trojan-go/advance/router/">国内直连和广告屏蔽</a></li>
+<li class=""><a href="https://p4gefau1t.github.io/trojan-go/advance/forward/">隧道和反向代理</a></li>
+<li class=""><a href="https://p4gefau1t.github.io/trojan-go/advance/nginx-relay/">一种基于SNI代理的多路径分流中继方案</a></li>
+<li class=""><a href="https://p4gefau1t.github.io/trojan-go/advance/plugin/">使用Shadowsocks插件/可插拔传输层</a></li>
+<li class=""><a href="https://p4gefau1t.github.io/trojan-go/advance/aead/">使用Shadowsocks AEAD进行二次加密</a></li>
+<li class=""><a href="https://p4gefau1t.github.io/trojan-go/advance/customize-protocol-stack/">自定义协议栈</a></li>
+<li class=""><a href="https://p4gefau1t.github.io/trojan-go/advance/api/">使用API动态管理用户</a></li>
+<li class=""><a href="https://p4gefau1t.github.io/trojan-go/advance/nat/">透明代理</a></li>
+</ul>
+  
+</li>
+
+<li class=""><a href="https://p4gefau1t.github.io/trojan-go/developer/">实现细节和开发指南</a>
+  
+<ul class="sub-menu">
+<li class=""><a href="https://p4gefau1t.github.io/trojan-go/developer/overview/">基本介绍</a></li>
+<li class=""><a href="https://p4gefau1t.github.io/trojan-go/developer/build/">编译和自定义Trojan-Go</a></li>
+<li class=""><a href="https://p4gefau1t.github.io/trojan-go/developer/trojan/">Trojan协议</a></li>
+<li class=""><a href="https://p4gefau1t.github.io/trojan-go/developer/mux/">多路复用</a></li>
+<li class=""><a href="https://p4gefau1t.github.io/trojan-go/developer/websocket/">Websocket</a></li>
+<li class=""><a href="https://p4gefau1t.github.io/trojan-go/developer/simplesocks/">SimpleSocks协议</a></li>
+<li class=""><a href="https://p4gefau1t.github.io/trojan-go/developer/api/">API开发</a></li>
+<li class=""><a href="https://p4gefau1t.github.io/trojan-go/developer/plugin/">可插拔传输层插件开发</a></li>
+<li class=""><a href="https://p4gefau1t.github.io/trojan-go/developer/url/">URL方案（草案）</a></li>
+</ul>
+  
+</li>
+</ul>
+</nav>
+
+
+
+<div class="sidebar-footer"></div>
+</div>
+</div><a href="#" id="backtothetop-fixed" class="backtothetop"
+ data-backtothetop-duration="600"
+ data-backtothetop-easing="easeOutQuart"
+ data-backtothetop-fixed-fadeIn="1000"
+ data-backtothetop-fixed-fadeOut="1000"
+ data-backtothetop-fixed-bottom="10"
+ data-backtothetop-fixed-right="20">
+<span class="fa-layers fa-fw">
+<i class="fas fa-circle"></i>
+<i class="fas fa-arrow-circle-up"></i>
+</span></a>
+</div>
+</body>
+</html>
