@@ -1,0 +1,15 @@
+{
+	"fixed": {
+		"file_version": "0.1.0"
+	},
+	"info": {
+		"0409": {
+			"ProductVersion": "0.1.0",
+			"CompanyName": "litai686",
+			"FileDescription": "Trojan-Go Desktop",
+			"LegalCopyright": "Copyright (c) 2026 litai686",
+			"ProductName": "Trojan-Go Desktop",
+			"Comments": "Trojan-Go desktop client"
+		}
+	}
+}

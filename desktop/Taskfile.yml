@@ -1,0 +1,39 @@
+version: '3'
+
+vars:
+  APP_NAME: "trojan-go-desktop"
+  BIN_DIR: "bin"
+  VERSION: '{{.VERSION | default "0.1.0"}}'
+  GOOS: '{{.GOOS | default OS}}'
+
+includes:
+  common: ./build/Taskfile.yml
+  windows: ./build/windows/Taskfile.yml
+  darwin: ./build/darwin/Taskfile.yml
+  linux: ./build/linux/Taskfile.yml
+
+tasks:
+  build:
+    summary: Builds the desktop application for the host OS (or GOOS)
+    cmds:
+      - task: "{{.GOOS}}:build"
+
+  package:
+    summary: Packages the desktop application for the host OS (or GOOS)
+    cmds:
+      - task: "{{.GOOS}}:package"
+
+  run:
+    summary: Runs the built application
+    cmds:
+      - task: "{{.GOOS}}:run"
+
+  dev:
+    summary: Runs the application in development mode
+    cmds:
+      - wails3 dev -config ./build/config.yml
+
+  stage:trojan:
+    summary: Copies build/<goos>-<goarch>/trojan-go next to the app binary
+    cmds:
+      - go run ./scripts/stage-trojan.go --goos "{{.GOOS}}" --goarch "{{.ARCH | default ARCH}}"

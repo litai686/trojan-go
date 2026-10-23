@@ -1,0 +1,41 @@
+# Wails build configuration for Trojan-Go Desktop.
+version: '3'
+
+info:
+  companyName: "litai686"
+  productName: "Trojan-Go Desktop"
+  productIdentifier: "com.litai686.trojan-go-desktop"
+  description: "Trojan-Go desktop client"
+  copyright: "Copyright (c) 2026 litai686"
+  comments: "Manage multiple trojan-go client profiles with live logs and in-app updates."
+  version: "0.1.0"
+
+# Dev mode: rebuild the embedded frontend and restart on Go/JS/CSS/HTML changes.
+dev_mode:
+  root_path: .
+  log_level: warn
+  debounce: 800
+  ignore:
+    dir:
+      - .git
+      - bin
+      - build
+    file:
+      - .DS_Store
+      - .gitignore
+      - .gitkeep
+      - "*_test.go"
+    watched_extension:
+      - "*.go"
+      - "*.js"
+      - "*.css"
+      - "*.html"
+    git_ignore: true
+  executes:
+    - cmd: wails3 build DEV=true
+      type: blocking
+    - cmd: wails3 task run
+      type: primary
+      exit_policy: shutdown
+
+fileAssociations:

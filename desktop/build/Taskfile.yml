@@ -1,0 +1,31 @@
+version: '3'
+
+tasks:
+  go:mod:tidy:
+    summary: Runs go mod tidy
+    internal: true
+    run: once
+    cmds:
+      - go mod tidy
+
+  generate:icons:
+    summary: Generates Windows .ico and macOS .icns from build/appicon.png
+    dir: build
+    sources:
+      - appicon.png
+    generates:
+      - windows/icon.ico
+      - darwin/icons.icns
+    cmds:
+      - wails3 generate icons -input appicon.png -macfilename darwin/icons.icns -windowsfilename windows/icon.ico
+
+  update:build-assets:
+    summary: Regenerates platform metadata from build/config.yml
+    dir: build
+    cmds:
+      - wails3 update build-assets -name "{{.APP_NAME}}" -binaryname "{{.APP_NAME}}" -config config.yml -dir .
+
+  stage:trojan:
+    summary: Copies build/<goos>-<goarch>/trojan-go next to the app binary
+    cmds:
+      - go run ./scripts/stage-trojan.go --goos "{{.GOOS | default OS}}" --goarch "{{.ARCH | default ARCH}}"

@@ -14,7 +14,10 @@
 # Dependency directories (remove the comment below to include it)
 # vendor/
 
-build/
+# Build artifacts (root only; desktop/build contains packaging assets)
+/build/
+desktop/bin/
+desktop/.task/
 *.DS_Store
 *.zip
 *.tar.gz

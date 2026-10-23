@@ -1,0 +1,44 @@
+version: '3'
+
+includes:
+  common: ../Taskfile.yml
+
+vars:
+  VERSION: '{{.VERSION | default "0.1.0"}}'
+  COMMIT:
+    sh: git rev-parse --short HEAD
+  BUILD_TIME: '{{now | date "2006-01-02T15:04:05Z07:00"}}'
+
+tasks:
+  build:
+    summary: Builds the application for Linux
+    deps:
+      - task: common:go:mod:tidy
+      - task: common:generate:icons
+      - task: common:stage:trojan
+        vars:
+          GOOS: linux
+          ARCH: '{{.ARCH | default ARCH}}'
+    cmds:
+      - go build {{.BUILD_FLAGS}} -o "{{.BIN_DIR}}/{{.APP_NAME}}"
+    vars:
+      BUILD_FLAGS: '{{if eq .DEV "true"}}-buildvcs=false -gcflags=all="-l" -ldflags="-X main.version={{.VERSION}} -X main.commit={{.COMMIT}} -X main.buildTime={{.BUILD_TIME}}"{{else}}-tags production -trimpath -buildvcs=false -ldflags="-w -s -X main.version={{.VERSION}} -X main.commit={{.COMMIT}} -X main.buildTime={{.BUILD_TIME}}"{{end}}'
+    env:
+      GOOS: linux
+      CGO_ENABLED: 1
+      GOARCH: '{{.ARCH | default ARCH}}'
+
+  package:
+    summary: Creates a portable tar.gz containing the app and trojan-go
+    deps:
+      - task: build
+    cmds:
+      - mkdir -p "{{.BIN_DIR}}/{{.APP_NAME}}-linux-{{.ARCH | default ARCH}}"
+      - cp "{{.BIN_DIR}}/{{.APP_NAME}}" "{{.BIN_DIR}}/trojan-go" "{{.BIN_DIR}}/{{.APP_NAME}}-linux-{{.ARCH | default ARCH}}/"
+      - tar -czf "{{.BIN_DIR}}/{{.APP_NAME}}-linux-{{.ARCH | default ARCH}}.tar.gz" -C "{{.BIN_DIR}}" "{{.APP_NAME}}-linux-{{.ARCH | default ARCH}}"
+
+  run:
+    env:
+      TROJAN_DESKTOP_EMBEDDED_FRONTEND: "1"
+    cmds:
+      - '{{.BIN_DIR}}/{{.APP_NAME}}'
