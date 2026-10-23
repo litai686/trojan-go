@@ -37,9 +37,16 @@ jobs:
           path: trojan-go-*.zip
           if-no-files-found: error
 
+      - name: Remove stale release for this tag
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG_NAME: ${{ github.ref_name }}
+        run: gh release delete "$TAG_NAME" --yes || true
+
       - name: Publish release
         uses: softprops/action-gh-release@v2
         with:
+          name: ${{ github.ref_name }}
           files: trojan-go-*.zip
           generate_release_notes: true
           draft: false
